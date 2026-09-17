@@ -174,9 +174,18 @@ export async function getNvrList(): Promise<Nvr[]> {
 }
 
 export async function getNvrDetail(id: string) {
-  const config = configList().find((item) => item.id === id);
+  const decodedId = safeDecode(id).trim();
+  const config = configList().find((item) => item.id === id || item.id === decodedId || item.id.trim() === decodedId);
   if (!config) return null;
   return readNvr(config);
+}
+
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 export async function getAllCctv() {
