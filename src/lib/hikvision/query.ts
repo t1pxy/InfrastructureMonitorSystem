@@ -174,18 +174,26 @@ export async function getNvrList(): Promise<Nvr[]> {
 }
 
 export async function getNvrDetail(id: string) {
-  const decodedId = safeDecode(id).trim();
-  const config = configList().find((item) => item.id === id || item.id === decodedId || item.id.trim() === decodedId);
+  const decodedIds = decodeRepeatedly(id);
+  const config = configList().find((item) => decodedIds.includes(item.id) || decodedIds.includes(item.id.trim()));
   if (!config) return null;
   return readNvr(config);
 }
 
-function safeDecode(value: string) {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
+function decodeRepeatedly(value: string) {
+  const values = [value];
+  let current = value;
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      const decoded = decodeURIComponent(current);
+      if (decoded === current) break;
+      values.push(decoded);
+      current = decoded;
+    } catch {
+      break;
+    }
   }
+  return Array.from(new Set(values));
 }
 
 export async function getAllCctv() {
