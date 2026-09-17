@@ -20,6 +20,24 @@ function durationSince(value: string | null | undefined) {
   return days > 0 ? `${days}d ${hours}h ${minutes}m` : hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m ${secs}s`;
 }
 
+function routeCandidates(value: string) {
+  const values = new Set<string>([value]);
+  let current = value;
+
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      const decoded = decodeURIComponent(current);
+      if (decoded === current) break;
+      values.add(decoded);
+      current = decoded;
+    } catch {
+      break;
+    }
+  }
+
+  return Array.from(values);
+}
+
 export default function NvrDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [nvr, setNvr] = useState<Nvr | null>(null);
   const [cameras, setCameras] = useState<NvrCamera[]>([]);
@@ -47,13 +65,25 @@ export default function NvrDetailPage({ params }: { params: Promise<{ id: string
     try {
       setError(null);
       setLoading(true);
-      const response = await fetch(`/api/nvr/${encodeURIComponent(id)}`, { cache: "no-store" });
-      const json = (await response.json()) as NvrDetailResponse;
-      if (!response.ok || !json.success || !json.data) {
-        throw new Error(json.error ?? "NVR not found or could not be loaded");
+
+      const candidates = routeCandidates(id);
+      let lastError = "NVR not found or could not be loaded";
+
+      for (const candidate of candidates) {
+        const response = await fetch(`/api/nvr/${encodeURIComponent(candidate)}`, { cache: "no-store" });
+        const json = (await response.json()) as NvrDetailResponse;
+
+        if (response.ok && json.success && json.data) {
+          setNvr(json.data);
+          setCameras(json.cameras ?? []);
+          setNvrId(json.data.routeId || candidate);
+          return;
+        }
+
+        lastError = json.error ?? lastError;
       }
-      setNvr(json.data);
-      setCameras(json.cameras ?? []);
+
+      throw new Error(lastError);
     } catch (cause) {
       setNvr(null);
       setCameras([]);
@@ -78,7 +108,7 @@ export default function NvrDetailPage({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><div className="font-semibold">Cannot load NVR</div><div className="mt-1 break-words">{error}</div>{nvrId ? <div className="mt-2 font-mono text-xs opacity-80">ID: {nvrId}</div> : null}</div> : null}
+      {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><div className="font-semibold">Cannot load NVR</div><div className="mt-1 break-words">{error}</div>{nvrId ? <div className="mt-2 font-mono text-xs opacity-80">Route ID: {nvrId}</div> : null}</div> : null}
       {loading && !nvr ? <div className="rounded-xl border bg-background p-12 text-center text-muted-foreground">Connecting to Hikvision NVR...</div> : null}
 
       {nvr ? <>
