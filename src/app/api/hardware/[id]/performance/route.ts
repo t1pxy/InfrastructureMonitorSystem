@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   getHardwarePerformance,
+  type PerformanceRange,
 } from "@/lib/hardware/performance";
 
 interface RouteContext {
@@ -10,54 +11,48 @@ interface RouteContext {
   }>;
 }
 
+function parseRange(value: string | null): PerformanceRange {
+  if (value === "1h" || value === "7d") {
+    return value;
+  }
+
+  return "24h";
+}
+
 export async function GET(
   request: NextRequest,
   context: RouteContext,
 ) {
   try {
-    const { id } =
-      await context.params;
+    const { id } = await context.params;
+    const decodedId = decodeURIComponent(id);
 
-    const decodedId =
-      decodeURIComponent(id);
+    const requestedLimit = Number(
+      request.nextUrl.searchParams.get("limit") ?? 60,
+    );
 
-    const requestedLimit =
-      Number(
-        request.nextUrl.searchParams.get(
-          "limit",
-        ) ?? 60,
-      );
+    const limit = Number.isFinite(requestedLimit)
+      ? requestedLimit
+      : 60;
 
-    const limit =
-      Number.isFinite(
-        requestedLimit,
-      )
-        ? requestedLimit
-        : 60;
+    const range = parseRange(
+      request.nextUrl.searchParams.get("range"),
+    );
 
-    const data =
-      await getHardwarePerformance(
-        decodedId,
-        limit,
-      );
+    const data = await getHardwarePerformance(
+      decodedId,
+      limit,
+      range,
+    );
 
     return NextResponse.json({
       success: true,
-
       data,
-
-      latest:
-        data.length > 0
-          ? data[
-              data.length - 1
-            ]
-          : null,
+      range,
+      latest: data.length > 0 ? data[data.length - 1] : null,
     });
   } catch (error) {
-    console.error(
-      "[GET /api/hardware/:id/performance]",
-      error,
-    );
+    console.error("[GET /api/hardware/:id/performance]", error);
 
     return NextResponse.json(
       {
@@ -69,9 +64,7 @@ export async function GET(
             ? error.message
             : "Failed to load performance",
       },
-      {
-        status: 500,
-      },
+      { status: 500 },
     );
   }
 }
