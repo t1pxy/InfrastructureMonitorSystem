@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 function parseRange(value: string | null): DashboardPerformanceRange {
-  if (value === "1h" || value === "7d") return value;
+  if (value === "1h" || value === "7d" || value === "14d" || value === "30d") return value;
   return "24h";
 }
 

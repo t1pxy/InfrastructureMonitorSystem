@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { HardwarePerformancePoint } from "@/types/hardware";
 
-type Range = "1h" | "24h" | "7d";
+type Range = "1h" | "24h" | "7d" | "14d" | "30d";
 
 type PerformanceResponse = {
   success: boolean;
@@ -16,6 +16,8 @@ const RANGE_OPTIONS: Array<{ value: Range; label: string }> = [
   { value: "1h", label: "1 Hour" },
   { value: "24h", label: "24 Hours" },
   { value: "7d", label: "7 Days" },
+  { value: "14d", label: "14 Days" },
+  { value: "30d", label: "30 Days" },
 ];
 
 function average(values: Array<number | null>) {
@@ -36,7 +38,7 @@ function formatTime(value: string, range: Range) {
 
   return new Intl.DateTimeFormat("th-TH", {
     timeZone: "Asia/Bangkok",
-    ...(range === "7d"
+    ...(range === "7d" || range === "14d" || range === "30d"
       ? { month: "short", day: "numeric", hour: "2-digit" }
       : { hour: "2-digit", minute: "2-digit" }),
   }).format(date);

@@ -6,7 +6,7 @@ import type { HardwarePerformancePoint } from "@/types/hardware";
 
 const MAX_SCAN_ROWS = 250000;
 
-export type DashboardPerformanceRange = "1h" | "24h" | "7d";
+export type DashboardPerformanceRange = "1h" | "24h" | "7d" | "14d" | "30d";
 
 interface PerformanceRow {
   ID: number;
@@ -85,6 +85,8 @@ function mapRow(row: PerformanceRow): HardwarePerformancePoint {
 function rangeHours(range: DashboardPerformanceRange): number {
   if (range === "1h") return 1;
   if (range === "7d") return 24 * 7;
+  if (range === "14d") return 24 * 14;
+  if (range === "30d") return 24 * 30;
   return 24;
 }
 

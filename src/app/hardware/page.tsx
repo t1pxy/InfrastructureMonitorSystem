@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import {
@@ -72,6 +72,14 @@ function filterLabel(filter: HardwareCardFilter) {
 }
 
 export default function HardwarePage() {
+  return (
+    <Suspense fallback={null}>
+      <HardwarePageContent />
+    </Suspense>
+  );
+}
+
+function HardwarePageContent() {
   const searchParams = useSearchParams();
   const [data, setData] = useState<Hardware[]>([]);
   const [summary, setSummary] = useState<HardwareSummaryType>(EMPTY_SUMMARY);

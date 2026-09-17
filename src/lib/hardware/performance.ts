@@ -82,6 +82,8 @@ function getRangeHours(range: PerformanceRange): number {
   switch (range) {
     case "1h": return 1;
     case "7d": return 24 * 7;
+    case "14d": return 24 * 14;
+    case "30d": return 24 * 30;
     case "24h":
     default: return 24;
   }
@@ -93,7 +95,7 @@ export async function getHardwarePerformance(
   range: PerformanceRange = "24h",
 ): Promise<HardwarePerformancePoint[]> {
   const db = await getDb();
-  const safeLimit = Math.max(1, Math.min(180, Math.floor(limit)));
+  const safeLimit = Math.max(1, Math.min(200, Math.floor(limit)));
   const safeRange = getRangeHours(range);
   const bucket = getPerformanceBucket(range);
 
