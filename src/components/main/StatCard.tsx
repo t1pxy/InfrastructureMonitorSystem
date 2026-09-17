@@ -16,6 +16,10 @@ export default function StatCard({ title, value, description, icon: Icon }: Stat
           <Icon className="h-4 w-4"></Icon>
         </div>
       </CardHeader>
+      <CardContent>
+        <div className="text-2xl fontfont-bold">{value}</div>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      </CardContent>
     </Card>
   );
 }
