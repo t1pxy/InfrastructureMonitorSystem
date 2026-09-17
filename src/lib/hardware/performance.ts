@@ -99,53 +99,38 @@ export async function getHardwarePerformance(
 
   const request = db.request();
   request.input("agentId", sql.NVarChar(40), agentId);
-  request.input("limit", sql.Int, safeLimit);
   request.input("rangeHours", sql.Int, safeRange);
 
   const result = await request.query(`
-    WITH recent_monitor AS (
-      SELECT TOP (${PERFORMANCE_SCAN_ROWS})
-        mh.ID,
-        mh.AgentID,
-        mh.CPUUsage,
-        mh.TotalMem,
-        mh.AvailableMem,
-        mh.CurrentTime
-      FROM TB_MONITORHISTORY mh
-      WHERE mh.CurrentTime >= DATEADD(HOUR, -@rangeHours, GETDATE())
-      ORDER BY mh.ID DESC
-    ),
-    target_rows AS (
-      SELECT TOP (@limit)
-        rm.ID,
-        rm.CPUUsage,
-        rm.TotalMem,
-        rm.AvailableMem,
-        rm.CurrentTime
-      FROM recent_monitor rm
-      WHERE rm.AgentID = @agentId AND rm.CurrentTime IS NOT NULL
-      ORDER BY rm.CurrentTime DESC, rm.ID DESC
-    ),
-    current_disk AS (
-      SELECT
-        SUM(CAST(d.Capacity AS DECIMAL(38,2))) AS DiskTotalBytes,
-        SUM(CAST(d.FreeSpace AS DECIMAL(38,2))) AS DiskFreeBytes
-      FROM TB_INV_DISK d
-      WHERE d.AgentID = @agentId
-    )
-    SELECT
-      tr.ID,
-      tr.CPUUsage,
-      tr.TotalMem,
-      tr.AvailableMem,
-      tr.CurrentTime,
-      cd.DiskTotalBytes,
-      cd.DiskFreeBytes
-    FROM target_rows tr
-    CROSS JOIN current_disk cd
-    ORDER BY tr.CurrentTime ASC, tr.ID ASC
+    SELECT TOP (${PERFORMANCE_SCAN_ROWS})
+      mh.ID,
+      mh.AgentID,
+      mh.CPUUsage,
+      mh.TotalMem,
+      mh.AvailableMem,
+      mh.CurrentTime,
+      (
+        SELECT SUM(CAST(d.Capacity AS DECIMAL(38,2)))
+        FROM TB_INV_DISK d
+        WHERE d.AgentID = mh.AgentID
+      ) AS DiskTotalBytes,
+      (
+        SELECT SUM(CAST(d.FreeSpace AS DECIMAL(38,2)))
+        FROM TB_INV_DISK d
+        WHERE d.AgentID = mh.AgentID
+      ) AS DiskFreeBytes
+    FROM TB_MONITORHISTORY mh
+    WHERE
+      mh.AgentID = @agentId
+      AND mh.CurrentTime IS NOT NULL
+      AND mh.CurrentTime >= DATEADD(HOUR, -@rangeHours, GETDATE())
+    ORDER BY mh.CurrentTime DESC, mh.ID DESC
   `);
 
-  const points = (result.recordset as PerformanceRow[]).map(mapHistoryRow);
-  return aggregatePerformance(points, bucket);
+  const points = (result.recordset as PerformanceRow[]).map(mapHistoryRow).reverse();
+  const aggregated = aggregatePerformance(points, bucket);
+
+  return aggregated.length > safeLimit
+    ? aggregated.slice(aggregated.length - safeLimit)
+    : aggregated;
 }
