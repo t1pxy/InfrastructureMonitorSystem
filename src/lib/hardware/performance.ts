@@ -6,6 +6,8 @@ import type { HardwarePerformancePoint } from "@/types/hardware";
 
 const PERFORMANCE_SCAN_ROWS = 250000;
 
+export type PerformanceRange = "1h" | "24h" | "7d";
+
 interface PerformanceRow {
   ID: number;
   CPUUsage: number | null;
@@ -75,7 +77,6 @@ function toIso(value: Date | string): string {
 
 function mapHistoryRow(row: PerformanceRow): HardwarePerformancePoint {
   const memoryTotalGb = memoryToGb(row.TotalMem);
-
   const memoryAvailableGb = memoryToGb(row.AvailableMem);
 
   const memoryUsedGb =
@@ -89,7 +90,6 @@ function mapHistoryRow(row: PerformanceRow): HardwarePerformancePoint {
       : null;
 
   const diskTotalGb = bytesToGb(row.DiskTotalBytes);
-
   const diskFreeGb = bytesToGb(row.DiskFreeBytes);
 
   const diskUsedGb =
@@ -104,36 +104,43 @@ function mapHistoryRow(row: PerformanceRow): HardwarePerformancePoint {
 
   return {
     recordedAt: toIso(row.CurrentTime),
-
     cpu: clamp(toNumber(row.CPUUsage)),
-
     memory,
-
     memoryUsedGb,
-
     memoryTotalGb,
-
     disk,
-
     diskUsedGb,
-
     diskTotalGb,
   };
+}
+
+function getRangeHours(range: PerformanceRange): number {
+  switch (range) {
+    case "1h":
+      return 1;
+    case "7d":
+      return 24 * 7;
+    case "24h":
+    default:
+      return 24;
+  }
 }
 
 export async function getHardwarePerformance(
   agentId: string,
   limit = 60,
+  range: PerformanceRange = "24h",
 ): Promise<HardwarePerformancePoint[]> {
   const db = await getDb();
 
   const safeLimit = Math.max(1, Math.min(180, Math.floor(limit)));
+  const safeRange = getRangeHours(range);
 
   const request = db.request();
 
   request.input("agentId", sql.NVarChar(40), agentId);
-
   request.input("limit", sql.Int, safeLimit);
+  request.input("rangeHours", sql.Int, safeRange);
 
   const result = await request.query(`
       WITH recent_monitor AS (
@@ -145,6 +152,7 @@ export async function getHardwarePerformance(
           mh.AvailableMem,
           mh.CurrentTime
         FROM TB_MONITORHISTORY mh
+        WHERE mh.CurrentTime >= DATEADD(HOUR, -@rangeHours, GETDATE())
         ORDER BY mh.ID DESC
       ),
 
@@ -166,18 +174,10 @@ export async function getHardwarePerformance(
 
       current_disk AS (
         SELECT
-          SUM(
-            CAST(d.Capacity AS DECIMAL(38,2))
-          ) AS DiskTotalBytes,
-
-          SUM(
-            CAST(d.FreeSpace AS DECIMAL(38,2))
-          ) AS DiskFreeBytes
-
+          SUM(CAST(d.Capacity AS DECIMAL(38,2))) AS DiskTotalBytes,
+          SUM(CAST(d.FreeSpace AS DECIMAL(38,2))) AS DiskFreeBytes
         FROM TB_INV_DISK d
-
-        WHERE d.AgentID =
-          @agentId
+        WHERE d.AgentID = @agentId
       )
 
       SELECT
@@ -186,14 +186,10 @@ export async function getHardwarePerformance(
         tr.TotalMem,
         tr.AvailableMem,
         tr.CurrentTime,
-
         cd.DiskTotalBytes,
         cd.DiskFreeBytes
-
       FROM target_rows tr
-
       CROSS JOIN current_disk cd
-
       ORDER BY
         tr.CurrentTime ASC,
         tr.ID ASC
