@@ -1,0 +1,203 @@
+import sql from "mssql";
+
+import { getDb } from "@/lib/db";
+
+import type { HardwarePerformancePoint } from "@/types/hardware";
+
+const PERFORMANCE_SCAN_ROWS = 250000;
+
+interface PerformanceRow {
+  ID: number;
+  CPUUsage: number | null;
+  TotalMem: number | null;
+  AvailableMem: number | null;
+  CurrentTime: Date | string;
+
+  DiskTotalBytes: number | string | null;
+  DiskFreeBytes: number | string | null;
+}
+
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const result = Number(value);
+
+  return Number.isFinite(result) ? result : null;
+}
+
+function clamp(value: number | null): number | null {
+  if (value === null) {
+    return null;
+  }
+
+  return Math.max(0, Math.min(100, value));
+}
+
+function memoryToGb(value: unknown): number | null {
+  const number = toNumber(value);
+
+  if (number === null || number <= 0) {
+    return null;
+  }
+
+  if (number >= 40_000_000_000) {
+    return number / 1024 / 1024 / 1024;
+  }
+
+  if (number >= 4_000_000) {
+    return number / 1024 / 1024;
+  }
+
+  if (number >= 4_096) {
+    return number / 1024;
+  }
+
+  return number;
+}
+
+function bytesToGb(value: unknown): number | null {
+  const number = toNumber(value);
+
+  if (number === null || number <= 0) {
+    return null;
+  }
+
+  return number / 1024 / 1024 / 1024;
+}
+
+function toIso(value: Date | string): string {
+  const date = value instanceof Date ? value : new Date(value);
+
+  return date.toISOString();
+}
+
+function mapHistoryRow(row: PerformanceRow): HardwarePerformancePoint {
+  const memoryTotalGb = memoryToGb(row.TotalMem);
+
+  const memoryAvailableGb = memoryToGb(row.AvailableMem);
+
+  const memoryUsedGb =
+    memoryTotalGb !== null && memoryAvailableGb !== null
+      ? Math.max(0, memoryTotalGb - memoryAvailableGb)
+      : null;
+
+  const memory =
+    memoryTotalGb !== null && memoryUsedGb !== null && memoryTotalGb > 0
+      ? clamp((memoryUsedGb / memoryTotalGb) * 100)
+      : null;
+
+  const diskTotalGb = bytesToGb(row.DiskTotalBytes);
+
+  const diskFreeGb = bytesToGb(row.DiskFreeBytes);
+
+  const diskUsedGb =
+    diskTotalGb !== null && diskFreeGb !== null
+      ? Math.max(0, diskTotalGb - diskFreeGb)
+      : null;
+
+  const disk =
+    diskTotalGb !== null && diskUsedGb !== null && diskTotalGb > 0
+      ? clamp((diskUsedGb / diskTotalGb) * 100)
+      : null;
+
+  return {
+    recordedAt: toIso(row.CurrentTime),
+
+    cpu: clamp(toNumber(row.CPUUsage)),
+
+    memory,
+
+    memoryUsedGb,
+
+    memoryTotalGb,
+
+    disk,
+
+    diskUsedGb,
+
+    diskTotalGb,
+  };
+}
+
+export async function getHardwarePerformance(
+  agentId: string,
+  limit = 60,
+): Promise<HardwarePerformancePoint[]> {
+  const db = await getDb();
+
+  const safeLimit = Math.max(1, Math.min(180, Math.floor(limit)));
+
+  const request = db.request();
+
+  request.input("agentId", sql.NVarChar(40), agentId);
+
+  request.input("limit", sql.Int, safeLimit);
+
+  const result = await request.query(`
+      WITH recent_monitor AS (
+        SELECT TOP (${PERFORMANCE_SCAN_ROWS})
+          mh.ID,
+          mh.AgentID,
+          mh.CPUUsage,
+          mh.TotalMem,
+          mh.AvailableMem,
+          mh.CurrentTime
+        FROM TB_MONITORHISTORY mh
+        ORDER BY mh.ID DESC
+      ),
+
+      target_rows AS (
+        SELECT TOP (@limit)
+          rm.ID,
+          rm.CPUUsage,
+          rm.TotalMem,
+          rm.AvailableMem,
+          rm.CurrentTime
+        FROM recent_monitor rm
+        WHERE
+          rm.AgentID = @agentId
+          AND rm.CurrentTime IS NOT NULL
+        ORDER BY
+          rm.CurrentTime DESC,
+          rm.ID DESC
+      ),
+
+      current_disk AS (
+        SELECT
+          SUM(
+            CAST(d.Capacity AS DECIMAL(38,2))
+          ) AS DiskTotalBytes,
+
+          SUM(
+            CAST(d.FreeSpace AS DECIMAL(38,2))
+          ) AS DiskFreeBytes
+
+        FROM TB_INV_DISK d
+
+        WHERE d.AgentID =
+          @agentId
+      )
+
+      SELECT
+        tr.ID,
+        tr.CPUUsage,
+        tr.TotalMem,
+        tr.AvailableMem,
+        tr.CurrentTime,
+
+        cd.DiskTotalBytes,
+        cd.DiskFreeBytes
+
+      FROM target_rows tr
+
+      CROSS JOIN current_disk cd
+
+      ORDER BY
+        tr.CurrentTime ASC,
+        tr.ID ASC
+    `);
+
+  return (result.recordset as PerformanceRow[]).map(mapHistoryRow);
+}
