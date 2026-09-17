@@ -103,7 +103,7 @@ export default function NvrPage() {
                   <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(row.status)}`}>{row.status}</span></td>
                   <td className="px-4 py-3"><div className="font-medium">{row.onlineCameraCount} online</div><div className="text-xs text-muted-foreground">{row.offlineCameraCount} offline / {row.cameraCount} total</div></td>
                   <td className="px-4 py-3"><div className="flex items-center gap-1.5"><HardDrive className="h-4 w-4 text-muted-foreground" />{row.storage.length} HDD</div></td>
-                  <td className="px-4 py-3 text-right"><Button asChild size="sm" variant="outline"><Link href={`/nvr/${encodeURIComponent(row.id)}`}>View CCTV</Link></Button></td>
+                  <td className="px-4 py-3 text-right"><Link href={`/nvr/${encodeURIComponent(row.id)}`} className="inline-flex h-8 items-center justify-center rounded-lg border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted">View CCTV</Link></td>
                 </tr>
               ))}
             </tbody>
