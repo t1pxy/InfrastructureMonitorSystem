@@ -1,6 +1,18 @@
 import { hikvisionRequest } from "@/lib/hikvision/client";
 import type { Nvr, NvrCamera, NvrConfig, NvrStorage } from "@/types/nvr";
 
+export function encodeNvrRouteId(id: string) {
+  return Buffer.from(id, "utf8").toString("base64url");
+}
+
+export function decodeNvrRouteId(value: string) {
+  try {
+    return Buffer.from(value, "base64url").toString("utf8");
+  } catch {
+    return value;
+  }
+}
+
 function tag(xml: string, name: string): string | null {
   const match = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, "i"));
   return match?.[1]?.replace(/<!\[CDATA\[|\]\]>/g, "").trim() || null;
@@ -128,6 +140,7 @@ async function readNvr(config: NvrConfig): Promise<{ nvr: Nvr; cameras: NvrCamer
     return {
       nvr: {
         id: config.id,
+        routeId: encodeNvrRouteId(config.id),
         name: config.name,
         host: config.host,
         site: config.site ?? null,
@@ -148,6 +161,7 @@ async function readNvr(config: NvrConfig): Promise<{ nvr: Nvr; cameras: NvrCamer
     return {
       nvr: {
         id: config.id,
+        routeId: encodeNvrRouteId(config.id),
         name: config.name,
         host: config.host,
         site: config.site ?? null,
@@ -174,8 +188,12 @@ export async function getNvrList(): Promise<Nvr[]> {
 }
 
 export async function getNvrDetail(id: string) {
+  const decodedRouteId = decodeNvrRouteId(id);
   const decodedIds = decodeRepeatedly(id);
-  const config = configList().find((item) => decodedIds.includes(item.id) || decodedIds.includes(item.id.trim()));
+  const config = configList().find((item) =>
+    item.id.trim() === decodedRouteId.trim() ||
+    decodedIds.some((value) => value.trim() === item.id.trim()),
+  );
   if (!config) return null;
   return readNvr(config);
 }
@@ -201,5 +219,5 @@ export async function getAllCctv() {
   const results = await Promise.all(configs.map(readNvr));
   return results.flatMap(({ nvr, cameras }) => cameras
     .filter((camera) => camera.channel !== null)
-    .map((camera) => ({ ...camera, nvrId: nvr.id, nvrName: nvr.name, nvrHost: nvr.host, site: nvr.site })));
+    .map((camera) => ({ ...camera, nvrId: nvr.id, nvrRouteId: nvr.routeId, nvrName: nvr.name, nvrHost: nvr.host, site: nvr.site })));
 }
