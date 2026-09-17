@@ -24,102 +24,78 @@ export default function NvrDetailPage({ params }: { params: Promise<{ id: string
   const [nvr, setNvr] = useState<Nvr | null>(null);
   const [cameras, setCameras] = useState<NvrCamera[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nvrId, setNvrId] = useState<string | null>(null);
 
-  async function load() {
+  useEffect(() => {
+    let cancelled = false;
+    void params.then(({ id }) => {
+      if (!cancelled) setNvrId(id);
+    });
+    return () => { cancelled = true; };
+  }, [params]);
+
+  useEffect(() => {
+    if (!nvrId) return;
+    void load(nvrId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nvrId]);
+
+  async function load(id = nvrId) {
+    if (!id) return;
     try {
+      setError(null);
       setLoading(true);
-      const { id } = await params;
       const response = await fetch(`/api/nvr/${encodeURIComponent(id)}`, { cache: "no-store" });
       const json = (await response.json()) as NvrDetailResponse;
-      if (!response.ok || !json.success) throw new Error(json.error ?? "Failed to load NVR");
+      if (!response.ok || !json.success || !json.data) {
+        throw new Error(json.error ?? "NVR not found or could not be loaded");
+      }
       setNvr(json.data);
-      setCameras(json.cameras);
-      setError(null);
+      setCameras(json.cameras ?? []);
     } catch (cause) {
+      setNvr(null);
+      setCameras([]);
       setError(cause instanceof Error ? cause.message : "Failed to load NVR");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
-  useEffect(() => { void load(); }, []);
-
   const online = cameras.filter((camera) => camera.status === "ONLINE").length;
   const offline = cameras.filter((camera) => camera.status === "OFFLINE").length;
+  const realCameras = cameras.filter((camera) => camera.channel !== null);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-        <Link href="/nvr" className="inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-sm font-medium transition-colors hover:bg-muted">
-          <ArrowLeft className="mr-2 h-4 w-4" /> NVR Monitor
-        </Link>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/cctv"
-            className="inline-flex h-9 items-center justify-center rounded-lg border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"
-          >
-            <Video className="mr-2 h-4 w-4" /> View All CCTV <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-          <Button variant="outline" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
-          </Button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link href="/nvr" className="inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-sm font-medium transition-colors hover:bg-muted"><ArrowLeft className="mr-2 h-4 w-4" /> NVR Monitor</Link>
+        <div className="flex gap-2">
+          <Link href="/cctv" className="inline-flex h-9 items-center justify-center rounded-lg border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"><Video className="mr-2 h-4 w-4" /> All CCTV</Link>
+          <Button variant="outline" onClick={() => { setRefreshing(true); void load(); }} disabled={loading || refreshing}><RefreshCw className={`mr-2 h-4 w-4 ${loading || refreshing ? "animate-spin" : ""}`} /> Refresh</Button>
         </div>
       </div>
 
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+      {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><div className="font-semibold">Cannot load NVR</div><div className="mt-1 break-words">{error}</div>{nvrId ? <div className="mt-2 font-mono text-xs opacity-80">ID: {nvrId}</div> : null}</div> : null}
+      {loading && !nvr ? <div className="rounded-xl border bg-background p-12 text-center text-muted-foreground">Connecting to Hikvision NVR...</div> : null}
 
       {nvr ? <>
         <div className="rounded-xl border bg-background p-5 shadow-sm">
-          <div className="flex flex-col justify-between gap-4 md:flex-row">
-            <div><h1 className="text-2xl font-bold">{nvr.name}</h1><p className="mt-1 font-mono text-sm text-muted-foreground">{nvr.host}</p></div>
-            <span className={`h-fit rounded-full px-3 py-1 text-xs font-semibold ${nvr.status === "ONLINE" ? "bg-emerald-100 text-emerald-700" : nvr.status === "OFFLINE" ? "bg-red-100 text-red-700" : "bg-muted text-muted-foreground"}`}>{nvr.status}</span>
-          </div>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <Info label="Site" value={nvr.site ?? "-"} />
-            <Info label="Model" value={nvr.model ?? "-"} />
-            <Info label="Serial" value={nvr.serialNumber ?? "-"} />
-            <Info label="Firmware" value={nvr.firmware ?? "-"} />
-            <Info label="Last Check" value={formatThai(nvr.lastChecked)} />
-          </div>
+          <div className="flex flex-col justify-between gap-4 md:flex-row"><div><h1 className="text-2xl font-bold">{nvr.name}</h1><p className="mt-1 font-mono text-sm text-muted-foreground">{nvr.host}</p>{nvr.error ? <p className="mt-2 text-sm text-red-600">{nvr.error}</p> : null}</div><span className={`h-fit rounded-full px-3 py-1 text-xs font-semibold ${nvr.status === "ONLINE" ? "bg-emerald-100 text-emerald-700" : nvr.status === "OFFLINE" ? "bg-red-100 text-red-700" : "bg-muted text-muted-foreground"}`}>{nvr.status}</span></div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><Info label="Site" value={nvr.site ?? "-"} /><Info label="Model" value={nvr.model ?? "-"} /><Info label="Serial" value={nvr.serialNumber ?? "-"} /><Info label="Firmware" value={nvr.firmware ?? "-"} /><Info label="Last Check" value={formatThai(nvr.lastChecked)} /></div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Metric icon={<Video className="h-4 w-4" />} label="Total CCTV" value={cameras.filter((c) => c.channel !== null).length} />
-          <Metric icon={<Wifi className="h-4 w-4" />} label="Online" value={online} />
-          <Metric icon={<WifiOff className="h-4 w-4" />} label="Offline" value={offline} />
-        </div>
+        <div className="grid gap-3 sm:grid-cols-3"><Metric icon={<Video className="h-4 w-4" />} label="Total CCTV" value={realCameras.length} /><Metric icon={<Wifi className="h-4 w-4" />} label="Online" value={online} /><Metric icon={<WifiOff className="h-4 w-4" />} label="Offline" value={offline} /></div>
 
         <div className="overflow-hidden rounded-xl border bg-background shadow-sm">
-          <div className="flex flex-col justify-between gap-2 border-b px-5 py-4 md:flex-row md:items-center">
-            <div><h2 className="font-semibold">CCTV Channels</h2><p className="text-xs text-muted-foreground">สถานะจาก Hikvision NVR ISAPI</p></div>
-            <Link href="/cctv" className="inline-flex h-8 items-center justify-center rounded-lg border px-2.5 text-xs font-medium hover:bg-muted">View All CCTV <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-sm">
-              <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground"><tr><th className="px-5 py-3">Channel</th><th className="px-5 py-3">Camera</th><th className="px-5 py-3">IP</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Offline Since</th><th className="px-5 py-3">Duration</th><th className="px-5 py-3">Last Check</th></tr></thead>
-              <tbody className="divide-y">
-                {cameras.map((camera) => <tr key={camera.id} className="hover:bg-muted/20">
-                  <td className="px-5 py-3 font-mono">CH {camera.channel ?? "-"}</td>
-                  <td className="px-5 py-3 font-medium">{camera.name}</td>
-                  <td className="px-5 py-3 font-mono text-xs">{camera.ipAddress ?? "-"}</td>
-                  <td className="px-5 py-3"><Status status={camera.status} /></td>
-                  <td className="px-5 py-3 text-xs text-muted-foreground">{formatThai(camera.offlineSince)}</td>
-                  <td className="px-5 py-3 text-xs">{camera.status === "OFFLINE" ? durationSince(camera.offlineSince) : "-"}</td>
-                  <td className="px-5 py-3 text-xs text-muted-foreground">{formatThai(camera.lastChecked)}</td>
-                </tr>)}
-              </tbody>
-            </table>
-          </div>
+          <div className="flex flex-col justify-between gap-2 border-b px-5 py-4 md:flex-row md:items-center"><div><h2 className="font-semibold">CCTV Channels</h2><p className="text-xs text-muted-foreground">สถานะจาก Hikvision NVR ISAPI</p></div><Link href="/cctv" className="inline-flex h-8 items-center justify-center rounded-lg border px-2.5 text-xs font-medium hover:bg-muted">View All CCTV <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[1000px] text-sm"><thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground"><tr><th className="px-5 py-3">Channel</th><th className="px-5 py-3">Camera</th><th className="px-5 py-3">IP</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Offline Since</th><th className="px-5 py-3">Duration</th><th className="px-5 py-3">Last Check</th></tr></thead><tbody className="divide-y">{realCameras.length === 0 ? <tr><td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">No CCTV channel data returned by this NVR.</td></tr> : realCameras.map((camera) => <tr key={camera.id} className="hover:bg-muted/20"><td className="px-5 py-3 font-mono">CH {camera.channel ?? "-"}</td><td className="px-5 py-3 font-medium">{camera.name}</td><td className="px-5 py-3 font-mono text-xs">{camera.ipAddress ?? "-"}</td><td className="px-5 py-3"><Status status={camera.status} /></td><td className="px-5 py-3 text-xs text-muted-foreground">{formatThai(camera.offlineSince)}</td><td className="px-5 py-3 text-xs">{camera.status === "OFFLINE" ? durationSince(camera.offlineSince) : "-"}</td><td className="px-5 py-3 text-xs text-muted-foreground">{formatThai(camera.lastChecked)}</td></tr>)}</tbody></table></div>
         </div>
 
-        <div className="rounded-xl border bg-background p-5 shadow-sm">
-          <h2 className="font-semibold">Storage</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {nvr.storage.length ? nvr.storage.map((disk) => <div key={disk.id} className="rounded-lg border p-4"><div className="flex justify-between"><span className="font-medium">{disk.name}</span><span className="text-xs">{disk.status}</span></div><p className="mt-2 text-sm text-muted-foreground">{disk.capacityGb?.toFixed(1) ?? "-"} GB total · {disk.freeGb?.toFixed(1) ?? "-"} GB free</p></div>) : <p className="text-sm text-muted-foreground">No storage information returned by this NVR.</p>}
-          </div>
-        </div>
-      </> : loading ? <div className="rounded-xl border p-12 text-center text-muted-foreground">Loading Hikvision NVR...</div> : null}
+        <div className="rounded-xl border bg-background p-5 shadow-sm"><h2 className="font-semibold">Storage</h2><div className="mt-4 grid gap-3 md:grid-cols-2">{nvr.storage.length ? nvr.storage.map((disk) => <div key={disk.id} className="rounded-lg border p-4"><div className="flex justify-between"><span className="font-medium">{disk.name}</span><span className="text-xs">{disk.status}</span></div><p className="mt-2 text-sm text-muted-foreground">{disk.capacityGb?.toFixed(1) ?? "-"} GB total · {disk.freeGb?.toFixed(1) ?? "-"} GB free</p></div>) : <p className="text-sm text-muted-foreground">No storage information returned by this NVR.</p>}</div></div>
+      </> : null}
     </div>
   );
 }
