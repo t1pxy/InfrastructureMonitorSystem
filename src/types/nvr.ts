@@ -18,6 +18,7 @@ export interface NvrCamera {
   ipAddress: string | null;
   status: CameraStatus;
   lastChecked: string | null;
+  offlineSince?: string | null;
   error?: string | null;
 }
 
