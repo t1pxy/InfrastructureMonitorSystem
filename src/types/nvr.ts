@@ -32,6 +32,7 @@ export interface NvrStorage {
 
 export interface Nvr {
   id: string;
+  routeId: string;
   name: string;
   host: string;
   site: string | null;
