@@ -59,9 +59,10 @@ async function getCameras(nvr: NvrConfig): Promise<NvrCamera[]> {
         id: `${nvr.id}-${channel ?? index + 1}`,
         channel,
         name: tag(block, "name") ?? `Channel ${channel ?? index + 1}`,
-        ipAddress: tag(block, "ipAddress") ?? tag(block, "addressingFormatType"),
+        ipAddress: tag(block, "ipAddress") ?? null,
         status: "UNKNOWN",
         lastChecked: null,
+        offlineSince: null,
         error: null,
       };
     });
@@ -73,6 +74,7 @@ async function getCameras(nvr: NvrConfig): Promise<NvrCamera[]> {
       ipAddress: null,
       status: "UNKNOWN",
       lastChecked: new Date().toISOString(),
+      offlineSince: null,
       error: error instanceof Error ? error.message : "Unknown Hikvision error",
     }];
   }
@@ -87,10 +89,16 @@ async function getCameraStatus(nvr: NvrConfig, cameras: NvrCamera[]) {
       const block = blocks.find((item) => numberValue(tag(item, "id")) === camera.channel);
       const status = tag(block ?? "", "online") ?? tag(block ?? "", "status");
       const online = status?.toLowerCase() === "true" || status === "1" || status?.toLowerCase() === "online";
-      return { ...camera, status: block ? (online ? "ONLINE" : "OFFLINE") : camera.status, lastChecked: now } as NvrCamera;
+      const nextStatus: NvrCamera["status"] = block ? (online ? "ONLINE" : "OFFLINE") : "UNKNOWN";
+      return {
+        ...camera,
+        status: nextStatus,
+        lastChecked: now,
+        offlineSince: nextStatus === "OFFLINE" ? (camera.offlineSince ?? now) : null,
+      };
     });
   } catch {
-    return cameras.map((camera) => ({ ...camera, lastChecked: new Date().toISOString() }));
+    return cameras.map((camera) => ({ ...camera, status: "UNKNOWN" as const, lastChecked: new Date().toISOString() }));
   }
 }
 
@@ -109,16 +117,16 @@ async function getStorage(nvr: NvrConfig): Promise<NvrStorage[]> {
   }
 }
 
-export async function getNvrList(): Promise<Nvr[]> {
-  const configs = configList();
-  return Promise.all(configs.map(async (config) => {
-    const checked = new Date().toISOString();
-    try {
-      const info = await getDeviceInfo(config);
-      let cameras = await getCameras(config);
-      cameras = await getCameraStatus(config, cameras);
-      const storage = await getStorage(config);
-      return {
+async function readNvr(config: NvrConfig): Promise<{ nvr: Nvr; cameras: NvrCamera[] }> {
+  const checked = new Date().toISOString();
+  try {
+    const info = await getDeviceInfo(config);
+    let cameras = await getCameras(config);
+    cameras = await getCameraStatus(config, cameras);
+    const storage = await getStorage(config);
+    const realCameras = cameras.filter((camera) => camera.channel !== null);
+    return {
+      nvr: {
         id: config.id,
         name: config.name,
         host: config.host,
@@ -128,14 +136,17 @@ export async function getNvrList(): Promise<Nvr[]> {
         firmware: info.firmware,
         status: "ONLINE",
         lastChecked: checked,
-        cameraCount: cameras.filter((camera) => camera.channel !== null).length,
-        onlineCameraCount: cameras.filter((camera) => camera.status === "ONLINE").length,
-        offlineCameraCount: cameras.filter((camera) => camera.status === "OFFLINE").length,
+        cameraCount: realCameras.length,
+        onlineCameraCount: realCameras.filter((camera) => camera.status === "ONLINE").length,
+        offlineCameraCount: realCameras.filter((camera) => camera.status === "OFFLINE").length,
         storage,
         error: null,
-      } satisfies Nvr;
-    } catch (error) {
-      return {
+      },
+      cameras,
+    };
+  } catch (error) {
+    return {
+      nvr: {
         id: config.id,
         name: config.name,
         host: config.host,
@@ -150,18 +161,28 @@ export async function getNvrList(): Promise<Nvr[]> {
         offlineCameraCount: 0,
         storage: [],
         error: error instanceof Error ? error.message : "Unable to connect to NVR",
-      } satisfies Nvr;
-    }
-  }));
+      },
+      cameras: [],
+    };
+  }
+}
+
+export async function getNvrList(): Promise<Nvr[]> {
+  const configs = configList();
+  const results = await Promise.all(configs.map(readNvr));
+  return results.map((result) => result.nvr);
 }
 
 export async function getNvrDetail(id: string) {
   const config = configList().find((item) => item.id === id);
   if (!config) return null;
-  const list = await getNvrList();
-  const nvr = list.find((item) => item.id === id) ?? null;
-  if (!nvr) return null;
-  let cameras = await getCameras(config);
-  cameras = await getCameraStatus(config, cameras);
-  return { nvr, cameras };
+  return readNvr(config);
+}
+
+export async function getAllCctv() {
+  const configs = configList();
+  const results = await Promise.all(configs.map(readNvr));
+  return results.flatMap(({ nvr, cameras }) => cameras
+    .filter((camera) => camera.channel !== null)
+    .map((camera) => ({ ...camera, nvrId: nvr.id, nvrName: nvr.name, nvrHost: nvr.host, site: nvr.site })));
 }
