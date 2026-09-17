@@ -6,7 +6,7 @@ import type { HardwarePerformancePoint } from "@/types/hardware";
 
 const PERFORMANCE_SCAN_ROWS = 250000;
 
-export type PerformanceRange = "1h" | "24h" | "7d";
+export type PerformanceRange = "1h" | "24h" | "7d" | "14d" | "30d";
 
 interface PerformanceRow {
   ID: number;

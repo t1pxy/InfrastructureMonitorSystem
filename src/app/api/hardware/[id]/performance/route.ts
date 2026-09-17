@@ -12,7 +12,7 @@ interface RouteContext {
 }
 
 function parseRange(value: string | null): PerformanceRange {
-  if (value === "1h" || value === "7d") {
+  if (value === "1h" || value === "7d" || value === "14d" || value === "30d") {
     return value;
   }
 

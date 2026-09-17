@@ -25,7 +25,7 @@ interface Props {
   initial?: HardwarePerformancePoint | null;
 }
 
-type PerformanceRange = "1h" | "24h" | "7d";
+type PerformanceRange = "1h" | "24h" | "7d" | "14d" | "30d";
 
 const RANGE_OPTIONS: Array<{
   value: PerformanceRange;
@@ -34,6 +34,8 @@ const RANGE_OPTIONS: Array<{
   { value: "1h", label: "1 Hour" },
   { value: "24h", label: "24 Hours" },
   { value: "7d", label: "7 Days" },
+  { value: "14d", label: "14 Days" },
+  { value: "30d", label: "30 Days" },
 ];
 
 function formatDate(value: string | null) {
