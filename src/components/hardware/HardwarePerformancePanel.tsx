@@ -25,39 +25,37 @@ interface Props {
   initial?: HardwarePerformancePoint | null;
 }
 
-function formatDate(
-  value: string | null,
-) {
+type PerformanceRange = "1h" | "24h" | "7d";
+
+const RANGE_OPTIONS: Array<{
+  value: PerformanceRange;
+  label: string;
+}> = [
+  { value: "1h", label: "1 Hour" },
+  { value: "24h", label: "24 Hours" },
+  { value: "7d", label: "7 Days" },
+];
+
+function formatDate(value: string | null) {
   if (!value) {
     return "-";
   }
 
-  const date =
-    new Date(value);
+  const date = new Date(value);
 
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return "-";
   }
 
-  return date.toLocaleString(
-    "th-TH",
-    {
-      timeZone:
-        "Asia/Bangkok",
-
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    },
-  );
+  return date.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function MetricCard({
@@ -69,27 +67,19 @@ function MetricCard({
   title: string;
   value: number | null;
   subtitle: string;
-  icon: React.ComponentType<{
-    className?: string;
-  }>;
+  icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
     <div className="rounded-xl border bg-background p-5 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            {title}
-          </p>
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
 
           <div className="mt-2 text-3xl font-bold">
-            {value === null
-              ? "-"
-              : `${value.toFixed(0)}%`}
+            {value === null ? "-" : `${value.toFixed(0)}%`}
           </div>
 
-          <p className="mt-1 text-xs text-muted-foreground">
-            {subtitle}
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
         </div>
 
         <div className="rounded-lg bg-muted p-2.5">
@@ -107,24 +97,16 @@ function LineChart({
 }: {
   title: string;
   data: HardwarePerformancePoint[];
-  getValue: (
-    point: HardwarePerformancePoint,
-  ) => number | null;
+  getValue: (point: HardwarePerformancePoint) => number | null;
 }) {
-  const values =
-    data
-      .map(getValue)
-      .filter(
-        (value): value is number =>
-          value !== null,
-      );
+  const values = data
+    .map(getValue)
+    .filter((value): value is number => value !== null);
 
   if (values.length < 2) {
     return (
       <div className="rounded-xl border bg-background p-5">
-        <div className="font-semibold">
-          {title}
-        </div>
+        <div className="font-semibold">{title}</div>
 
         <div className="mt-12 text-center text-sm text-muted-foreground">
           Not enough performance data
@@ -137,66 +119,38 @@ function LineChart({
   const height = 220;
   const padding = 20;
 
-  const points =
-    data
-      .map(
-        (point, index) => {
-          const value =
-            getValue(
-              point,
-            );
+  const points = data
+    .map((point, index) => {
+      const value = getValue(point);
 
-          if (
-            value === null
-          ) {
-            return null;
-          }
+      if (value === null) {
+        return null;
+      }
 
-          const x =
-            padding +
-            (index /
-              Math.max(
-                1,
-                data.length -
-                  1,
-              )) *
-              (width -
-                padding * 2);
+      const x =
+        padding +
+        (index / Math.max(1, data.length - 1)) * (width - padding * 2);
 
-          const y =
-            height -
-            padding -
-            (value /
-              100) *
-              (height -
-                padding * 2);
+      const y =
+        height -
+        padding -
+        (value / 100) * (height - padding * 2);
 
-          return `${x},${y}`;
-        },
-      )
-      .filter(
-        (
-          point,
-        ): point is string =>
-          point !== null,
-      )
-      .join(" ");
+      return `${x},${y}`;
+    })
+    .filter((point): point is string => point !== null)
+    .join(" ");
 
-  const latest =
-    values[values.length - 1];
+  const latest = values[values.length - 1];
 
   return (
     <div className="rounded-xl border bg-background p-5">
       <div className="flex items-center justify-between">
         <div>
-          <div className="font-semibold">
-            {title}
-          </div>
+          <div className="font-semibold">{title}</div>
 
           <div className="mt-1 text-xs text-muted-foreground">
-            Last:{" "}
-            {latest.toFixed(1)}
-            %
+            Last: {latest.toFixed(1)}%
           </div>
         </div>
       </div>
@@ -207,36 +161,25 @@ function LineChart({
           className="h-[220px] w-full"
           preserveAspectRatio="none"
         >
-          {[0, 25, 50, 75, 100].map(
-            (value) => {
-              const y =
-                height -
-                padding -
-                (value /
-                  100) *
-                  (height -
-                    padding *
-                      2);
+          {[0, 25, 50, 75, 100].map((value) => {
+            const y =
+              height -
+              padding -
+              (value / 100) * (height - padding * 2);
 
-              return (
-                <line
-                  key={value}
-                  x1={padding}
-                  x2={
-                    width -
-                    padding
-                  }
-                  y1={y}
-                  y2={y}
-                  stroke="currentColor"
-                  strokeOpacity={
-                    0.1
-                  }
-                  strokeWidth="1"
-                />
-              );
-            },
-          )}
+            return (
+              <line
+                key={value}
+                x1={padding}
+                x2={width - padding}
+                y1={y}
+                y2={y}
+                stroke="currentColor"
+                strokeOpacity={0.1}
+                strokeWidth="1"
+              />
+            );
+          })}
 
           <polyline
             fill="none"
@@ -256,23 +199,14 @@ export default function HardwarePerformancePanel({
   agentId,
   initial = null,
 }: Props) {
-  const [history, setHistory] =
-    useState<
-      HardwarePerformancePoint[]
-    >([]);
-
-  const [latest, setLatest] =
-    useState<
-      HardwarePerformancePoint | null
-    >(initial);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [refreshing, setRefreshing] =
-    useState(false);
+  const [history, setHistory] = useState<HardwarePerformancePoint[]>([]);
+  const [latest, setLatest] = useState<HardwarePerformancePoint | null>(initial);
+  const [range, setRange] = useState<PerformanceRange>("24h");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   async function load(
+    selectedRange: PerformanceRange = range,
     silent = false,
   ) {
     try {
@@ -282,105 +216,94 @@ export default function HardwarePerformancePanel({
         setLoading(true);
       }
 
-      const response =
-        await fetch(
-          `/api/hardware/${encodeURIComponent(
-            agentId,
-          )}/performance?limit=60`,
-          {
-            cache:
-              "no-store",
-          },
-        );
+      const response = await fetch(
+        `/api/hardware/${encodeURIComponent(
+          agentId,
+        )}/performance?limit=180&range=${selectedRange}`,
+        { cache: "no-store" },
+      );
 
-      const json =
-        (await response.json()) as HardwarePerformanceResponse;
+      const json = (await response.json()) as HardwarePerformanceResponse;
 
-      if (
-        !response.ok ||
-        !json.success
-      ) {
-        throw new Error(
-          json.error ||
-            "Failed to load performance",
-        );
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || "Failed to load performance");
       }
 
-      setHistory(
-        json.data ?? [],
-      );
-
-      setLatest(
-        json.latest ??
-          null,
-      );
+      setHistory(json.data ?? []);
+      setLatest(json.latest ?? null);
     } catch (error) {
       console.error(error);
     } finally {
       setLoading(false);
-      setRefreshing(
-        false,
-      );
+      setRefreshing(false);
     }
   }
 
   useEffect(() => {
-    // Intentional fetch-on-mount/agentId-change; setLoading(true) inside
-    // load() must run synchronously so the skeleton shows immediately.
+    // Intentional fetch-on-mount/agentId-change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
+    void load("24h");
 
-    const timer =
-      window.setInterval(
-        () => {
-          void load(true);
-        },
-        30_000,
-      );
+    const timer = window.setInterval(() => {
+      void load(range, true);
+    }, 30_000);
 
-    return () =>
-      window.clearInterval(
-        timer,
-      );
+    return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId]);
 
+  function changeRange(nextRange: PerformanceRange) {
+    setRange(nextRange);
+    void load(nextRange, true);
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">
-            Live Performance
-          </h2>
+          <h2 className="text-lg font-semibold">Performance History</h2>
 
           <p className="mt-1 text-sm text-muted-foreground">
             CPU and memory history from StarCat monitoring.
           </p>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            void load(true)
-          }
-          disabled={refreshing}
-        >
-          {refreshing ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="mr-2 h-4 w-4" />
-          )}
-          Refresh
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-lg border p-1">
+            {RANGE_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                variant={range === option.value ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => changeRange(option.value)}
+                disabled={refreshing}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void load(range, true)}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {loading ? (
         <div className="grid gap-4 md:grid-cols-3">
-          {Array.from({
-            length: 3,
-          }).map((_, index) => (
+          {Array.from({ length: 3 }).map((_, index) => (
             <div
               key={index}
               className="h-32 animate-pulse rounded-xl border bg-muted/30"
@@ -392,29 +315,17 @@ export default function HardwarePerformancePanel({
           <div className="grid gap-4 md:grid-cols-3">
             <MetricCard
               title="CPU"
-              value={
-                latest?.cpu ??
-                null
-              }
+              value={latest?.cpu ?? null}
               subtitle="Current processor usage"
               icon={Cpu}
             />
 
             <MetricCard
               title="RAM"
-              value={
-                latest?.memory ??
-                null
-              }
+              value={latest?.memory ?? null}
               subtitle={
                 latest
-                  ? `${latest.memoryUsedGb?.toFixed(
-                      1,
-                    ) ?? "-"} / ${
-                      latest.memoryTotalGb?.toFixed(
-                        1,
-                      ) ?? "-"
-                    } GB`
+                  ? `${latest.memoryUsedGb?.toFixed(1) ?? "-"} / ${latest.memoryTotalGb?.toFixed(1) ?? "-"} GB`
                   : "Current memory usage"
               }
               icon={MemoryStick}
@@ -422,19 +333,10 @@ export default function HardwarePerformancePanel({
 
             <MetricCard
               title="Disk"
-              value={
-                latest?.disk ??
-                null
-              }
+              value={latest?.disk ?? null}
               subtitle={
                 latest
-                  ? `${latest.diskUsedGb?.toFixed(
-                      1,
-                    ) ?? "-"} / ${
-                      latest.diskTotalGb?.toFixed(
-                        1,
-                      ) ?? "-"
-                    } GB`
+                  ? `${latest.diskUsedGb?.toFixed(1) ?? "-"} / ${latest.diskTotalGb?.toFixed(1) ?? "-"} GB`
                   : "Current disk usage"
               }
               icon={HardDrive}
@@ -445,35 +347,28 @@ export default function HardwarePerformancePanel({
             <LineChart
               title="CPU Usage"
               data={history}
-              getValue={(point) =>
-                point.cpu
-              }
+              getValue={(point) => point.cpu}
             />
 
             <LineChart
               title="Memory Usage"
               data={history}
-              getValue={(point) =>
-                point.memory
-              }
+              getValue={(point) => point.memory}
             />
           </div>
 
           <div className="rounded-xl border bg-muted/20 p-4 text-sm">
-            <div className="font-medium">
-              Last performance sample
-            </div>
+            <div className="font-medium">Last performance sample</div>
 
             <div className="mt-1 text-muted-foreground">
               {latest?.recordedAt
-                ? formatDate(
-                    latest.recordedAt,
-                  )
+                ? formatDate(latest.recordedAt)
                 : "No performance data"}
             </div>
 
             <div className="mt-2 text-xs text-muted-foreground">
-              Disk history is not plotted because StarCat stores the disk inventory
+              Range: {RANGE_OPTIONS.find((option) => option.value === range)?.label}
+              . Disk history is not plotted because StarCat stores the disk inventory
               snapshot separately from CPU/RAM monitor history.
             </div>
           </div>
