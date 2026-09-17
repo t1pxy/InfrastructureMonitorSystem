@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -7,6 +8,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   RefreshCw,
 } from "lucide-react";
 
@@ -96,7 +98,18 @@ function formatCheckedAt(value?: string) {
   return new Intl.DateTimeFormat("th-TH", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Asia/Bangkok",
   }).format(date);
+}
+
+function getHardwareHref(device: Device) {
+  const id = device.agentId ?? device.hostname;
+
+  if (!id) {
+    return "#";
+  }
+
+  return `/hardware/${encodeURIComponent(id)}`;
 }
 
 export default function WindowsFleetComparison() {
@@ -256,7 +269,6 @@ export default function WindowsFleetComparison() {
         {error ? (
           <div className="flex items-start gap-2 rounded-lg border p-3 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-
             <span>{error}</span>
           </div>
         ) : null}
@@ -294,7 +306,7 @@ export default function WindowsFleetComparison() {
         </div>
 
         <div className="overflow-x-auto rounded-xl border">
-          <table className="w-full min-w-[1040px] text-sm">
+          <table className="w-full min-w-[1160px] text-sm">
             <thead className="border-b bg-muted/40">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Machine</th>
@@ -314,55 +326,88 @@ export default function WindowsFleetComparison() {
                 <th className="px-4 py-3 text-left font-medium">Behind</th>
 
                 <th className="px-4 py-3 text-left font-medium">Status</th>
+
+                <th className="px-4 py-3 text-center font-medium">Action</th>
               </tr>
             </thead>
 
             <tbody>
-              {visibleRows.map((device, index) => (
-                <tr
-                  key={device.agentId ?? device.hostname ?? `row-${index}`}
-                  className="border-b last:border-0"
-                >
-                  <td className="px-4 py-3">
-                    <div className="font-medium">
-                      {device.hostname ?? device.agentId ?? "-"}
-                    </div>
+              {visibleRows.map((device, index) => {
+                const hardwareHref = getHardwareHref(device);
 
-                    <div className="text-xs text-muted-foreground">
-                      {device.ipAddress ?? "-"}
-                    </div>
-                  </td>
+                const canOpen = hardwareHref !== "#";
 
-                  <td className="px-4 py-3">
-                    {device.comparison.currentVersion ?? "-"}
-                  </td>
+                return (
+                  <tr
+                    key={device.agentId ?? device.hostname ?? `row-${index}`}
+                    className="border-b last:border-0 hover:bg-muted/20"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-medium">
+                        {device.hostname ?? device.agentId ?? "-"}
+                      </div>
 
-                  <td className="px-4 py-3 font-mono tabular-nums">
-                    {device.comparison.currentBuild ?? "-"}
-                  </td>
+                      <div className="text-xs text-muted-foreground">
+                        {device.ipAddress ?? "-"}
+                      </div>
+                    </td>
 
-                  <td className="px-4 py-3 font-mono tabular-nums">
-                    {device.comparison.latestBuild ?? "-"}
-                  </td>
+                    <td className="px-4 py-3">
+                      {device.comparison.currentVersion ?? "-"}
+                    </td>
 
-                  <td className="px-4 py-3">
-                    {device.comparison.latestKb ?? "-"}
-                  </td>
+                    <td className="px-4 py-3 font-mono tabular-nums">
+                      {device.comparison.currentBuild ?? "-"}
+                    </td>
 
-                  <td className="px-4 py-3 tabular-nums">
-                    {device.comparison.revisionsBehind ?? "-"}
-                  </td>
+                    <td className="px-4 py-3 font-mono tabular-nums">
+                      {device.comparison.latestBuild ?? "-"}
+                    </td>
 
-                  <td className="px-4 py-3">
-                    {statusBadge(device.comparison.status)}
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-4 py-3">
+                      {device.comparison.latestKb ?? "-"}
+                    </td>
+
+                    <td className="px-4 py-3 tabular-nums">
+                      {device.comparison.revisionsBehind ?? "-"}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {statusBadge(device.comparison.status)}
+                    </td>
+
+                    <td className="px-4 py-3 text-center">
+                      {canOpen ? (
+                        <Link href={hardwareHref}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            ดูข้อมูลเครื่อง
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled
+                        >
+                          ดูข้อมูลเครื่อง
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
 
               {!loading && visibleRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-10 text-center text-muted-foreground"
                   >
                     ไม่มีข้อมูลสำหรับสถานะนี้

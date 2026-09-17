@@ -1,74 +1,182 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { BarChart3, LayoutDashboard, Settings, ShieldCheck, Cpu, Server, Cctv } from "lucide-react"
-import { cn } from "@/lib/utils"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  BarChart3,
+  Cctv,
+  Cpu,
+  LayoutDashboard,
+  Server,
+  Settings,
+  ShieldCheck,
+} from "lucide-react";
 
-const menuItems = [
+import { cn } from "@/lib/utils";
+
+type MenuItem = {
+  title: string;
+  href: string;
+  icon: React.ComponentType<{
+    className?: string;
+  }>;
+};
+
+type MenuSection = {
+  title: string;
+  items: MenuItem[];
+};
+
+const menuSections: MenuSection[] = [
   {
-    title: "Home",
-    href: "/home",
-    icon: LayoutDashboard
+    title: "Overview",
+    items: [
+      {
+        title: "Home",
+        href: "/home",
+        icon: LayoutDashboard,
+      },
+    ],
   },
   {
-    title: "Hardware Monitor",
-    href: "/hardware",
-    icon: Cpu
+    title: "Monitoring",
+    items: [
+      {
+        title: "Hardware Monitor",
+        href: "/hardware",
+        icon: Cpu,
+      },
+      {
+        title: "Windows Update",
+        href: "/update",
+        icon: ShieldCheck,
+      },
+    ],
   },
   {
-    title: "NVR",
-    href: "/nvr",
-    icon: Server
+    title: "Infrastructure",
+    items: [
+      {
+        title: "NVR",
+        href: "/nvr",
+        icon: Server,
+      },
+      {
+        title: "CCTV",
+        href: "/cctv",
+        icon: Cctv,
+      },
+    ],
   },
   {
-    title: "CCTV",
-    href: "/cctv",
-    icon: Cctv
+    title: "Management",
+    items: [
+      {
+        title: "Reports",
+        href: "/report",
+        icon: BarChart3,
+      },
+      {
+        title: "Settings",
+        href: "/setting",
+        icon: Settings,
+      },
+    ],
   },
-  {
-    title: "Windows Update",
-    href: "/update",
-    icon: ShieldCheck
-  },
-  {
-    title: "Reports",
-    href: "/report",
-    icon: BarChart3
-  },
-  {
-    title: "Settings",
-    href: "/setting",
-    icon: Settings
-  }
 ];
 
+function isActivePath(pathname: string, href: string) {
+  if (href === "/home") {
+    return pathname === "/home" || pathname === "/";
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export default function AppSidebar() {
+  const pathname = usePathname();
+
   return (
-    <aside className="hidden h-screen w-64 flex-col border-r bg-background md:flex">
-      <div className="flex h-16 items-center border-b px-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r bg-background md:flex">
+      {/* Header */}
+      <div className="flex h-16 shrink-0 items-center border-b px-5">
+        <Link href="/home" className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-sm">
             IHL
           </div>
-          <div>
-            <h1 className="font-semibold">Infrastructure</h1>
-            <p className="text-xs text-muted-foreground">Monitor System</p>
+
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold tracking-tight">
+              Infrastructure
+            </div>
+
+            <div className="truncate text-xs text-muted-foreground">
+              Monitor System
+            </div>
           </div>
-        </div>
+        </Link>
       </div>
-      <nav className="flex-1 space-y-1 p-4">
-        <p className="mb-3 px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Main Menu</p>
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link key={item.href} href={item.href} className={cn("flex items-center gap-3 rounded-lg py-2.5", "text-sm fint-medium text-muted-foreground", "transition-colors hover:bg-muted hover:text-foreground")}><Icon className="h-5 w-5"></Icon><span>{item.title}</span></Link>
-          )
-        })}
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <div className="space-y-5">
+          {menuSections.map((section) => (
+            <div key={section.title}>
+              <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+                {section.title}
+              </div>
+
+              <div className="space-y-1">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActivePath(pathname, item.href);
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
+                        active
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          "h-4.5 w-4.5 shrink-0",
+                          active
+                            ? "text-primary-foreground"
+                            : "text-muted-foreground group-hover:text-foreground",
+                        )}
+                      />
+
+                      <span className="truncate">{item.title}</span>
+
+                      {active ? (
+                        <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary-foreground/90" />
+                      ) : null}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       </nav>
-      <div className="border-t p-4">
-        <div className="rounded-lg bg-mute p-3">
-          <p className="text-sm font-medium">Hardware Monitor System</p>
-          <p className="mt-1 text-xs text-muted-foreground">Version 1.0</p>
+
+      {/* Footer */}
+      <div className="shrink-0 border-t p-3">
+        <div className="rounded-xl border bg-muted/30 px-3 py-3">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-emerald-500" />
+
+            <span className="text-xs font-medium">Monitoring System</span>
+          </div>
+
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Infrastructure Monitor v1.0
+          </p>
         </div>
       </div>
     </aside>
