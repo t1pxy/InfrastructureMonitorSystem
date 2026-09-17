@@ -81,18 +81,6 @@ type DashboardData = {
   generatedOn: string | null;
 };
 
-const EMPTY_SUMMARY: HardwareSummary = {
-  total: 0,
-  healthy: 0,
-  warning: 0,
-  critical: 0,
-  offline: 0,
-  unknown: 0,
-  updatePending: 0,
-  desktop: 0,
-  notebook: 0,
-};
-
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
@@ -194,38 +182,6 @@ function getStatusBadgeClass(status: Hardware["status"]) {
 
     case "OFFLINE":
       return "bg-slate-500/10 text-slate-700 dark:text-slate-300";
-
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
-
-function getWindowsStatusLabel(status: ComplianceStatus) {
-  switch (status) {
-    case "CURRENT":
-      return "ล่าสุด";
-
-    case "UPDATE_AVAILABLE":
-      return "ต้องอัปเดต";
-
-    case "UNSUPPORTED_VERSION":
-      return "หมดระยะรองรับ";
-
-    default:
-      return "ไม่ทราบ";
-  }
-}
-
-function getWindowsStatusClass(status: ComplianceStatus) {
-  switch (status) {
-    case "CURRENT":
-      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
-
-    case "UPDATE_AVAILABLE":
-      return "bg-amber-500/10 text-amber-700 dark:text-amber-400";
-
-    case "UNSUPPORTED_VERSION":
-      return "bg-red-500/10 text-red-700 dark:text-red-400";
 
     default:
       return "bg-muted text-muted-foreground";
@@ -448,6 +404,9 @@ export default function InfrastructureDashboard() {
   }, []);
 
   useEffect(() => {
+    // Intentional fetch-on-mount; setLoading(true) inside loadDashboard()
+    // must run synchronously so the skeleton shows immediately.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDashboard();
 
     const timer = window.setInterval(() => {

@@ -164,6 +164,9 @@ export default function HardwarePage() {
   }, [loadData]);
 
   useEffect(() => {
+    // Intentional fetch-on-mount; setSummaryLoading(true) inside
+    // loadSummary() must run synchronously so the skeleton shows immediately.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSummary();
   }, [loadSummary]);
 

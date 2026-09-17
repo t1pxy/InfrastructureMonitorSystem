@@ -139,24 +139,6 @@ function mapUpdate(row: UpdateRecordRow): WindowsUpdateRecord {
   };
 }
 
-function deviceSourceQuery() {
-  return `
-    SELECT
-      d.agentId,
-      d.hostname,
-      d.deviceClass,
-      d.windowsVersion
-    FROM (
-      ${DEVICE_SOURCE}
-    ) AS d
-    WHERE
-      d.deviceClass IN (
-        'DESKTOP',
-        'NOTEBOOK'
-      )
-  `;
-}
-
 export async function getWindowsUpdateDevices(
   search = "",
 ): Promise<WindowsUpdateDevice[]> {

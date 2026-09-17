@@ -45,6 +45,9 @@ export default function WindowsReleaseBaselineCard() {
   }
 
   useEffect(() => {
+    // Intentional fetch-on-mount; setLoading(true) inside load() must run
+    // synchronously so the skeleton shows immediately.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, []);
 

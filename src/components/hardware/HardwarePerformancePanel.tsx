@@ -325,6 +325,9 @@ export default function HardwarePerformancePanel({
   }
 
   useEffect(() => {
+    // Intentional fetch-on-mount/agentId-change; setLoading(true) inside
+    // load() must run synchronously so the skeleton shows immediately.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
 
     const timer =
@@ -339,6 +342,7 @@ export default function HardwarePerformancePanel({
       window.clearInterval(
         timer,
       );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId]);
 
   return (

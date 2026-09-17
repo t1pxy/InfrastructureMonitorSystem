@@ -138,7 +138,11 @@ export default function HardwareInventoryPanel({ agentId }: Props) {
   }
 
   useEffect(() => {
+    // Intentional fetch-on-mount/agentId-change; setLoading(true) inside
+    // load() must run synchronously so the skeleton shows immediately.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId]);
 
   if (loading) {

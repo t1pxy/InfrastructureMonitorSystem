@@ -1,4 +1,4 @@
-import sql, { pool } from "mssql";
+import sql from "mssql";
 
 const config: sql.config = {
   server: process.env.DB_SERVER || "localhost",
@@ -22,6 +22,8 @@ const config: sql.config = {
 let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
 export function getDb(): Promise<sql.ConnectionPool> {
+  if (poolPromise) return poolPromise;
+
   poolPromise = new sql.ConnectionPool(config).connect().then((pool) => {
     console.log("[MSSQL] Connected to database.");
     return pool

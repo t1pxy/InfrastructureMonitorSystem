@@ -154,6 +154,9 @@ export default function WindowsFleetComparison() {
   }
 
   useEffect(() => {
+    // Intentional fetch-on-mount; setLoading(true) inside load() must run
+    // synchronously so the skeleton shows immediately.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
 
     const timer = setInterval(() => void load(), 5 * 60 * 1000);

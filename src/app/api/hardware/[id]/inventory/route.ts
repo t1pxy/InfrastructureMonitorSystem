@@ -160,7 +160,9 @@ export async function GET(request: Request, { params }: Params) {
     ORDER BY DeviceName;
   `);
 
-    const recordsets = result.recordsets;
+    const recordsets = result.recordsets as unknown as Array<
+      Array<Record<string, unknown>>
+    >;
 
     const cpuRows = (recordsets[0] ?? []) as Array<{
       name: unknown;
