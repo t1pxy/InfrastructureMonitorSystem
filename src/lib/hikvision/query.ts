@@ -188,12 +188,26 @@ export async function getNvrList(): Promise<Nvr[]> {
 }
 
 export async function getNvrDetail(id: string) {
-  const decodedRouteId = decodeNvrRouteId(id);
-  const decodedIds = decodeRepeatedly(id);
-  const config = configList().find((item) =>
-    item.id.trim() === decodedRouteId.trim() ||
-    decodedIds.some((value) => value.trim() === item.id.trim()),
-  );
+  const configs = configList();
+  const decodedRouteId = decodeNvrRouteId(id).trim();
+  const decodedIds = decodeRepeatedly(id).map((value) => value.trim());
+
+  // Primary lookup: route-safe Base64URL id generated from the same config id.
+  let config = configs.find((item) => encodeNvrRouteId(item.id) === id);
+
+  // Backward compatibility for old links containing encoded/raw ids.
+  if (!config) {
+    config = configs.find((item) =>
+      item.id.trim() === decodedRouteId || decodedIds.includes(item.id.trim()),
+    );
+  }
+
+  // Last fallback: accept a route id that was URL-decoded by Next.js.
+  if (!config) {
+    const normalized = decodeRepeatedly(decodedRouteId).map((value) => value.trim());
+    config = configs.find((item) => normalized.includes(item.id.trim()));
+  }
+
   if (!config) return null;
   return readNvr(config);
 }
