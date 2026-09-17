@@ -10,11 +10,19 @@ export type HardwareStatus =
   | "OFFLINE"
   | "UNKNOWN";
 
+export type WindowsUpdateStatus =
+  | "CURRENT"
+  | "UPDATE_AVAILABLE"
+  | "UNSUPPORTED_VERSION"
+  | "UNKNOWN";
+
 export interface Hardware {
   id: string;
   hostname: string;
 
-  deviceClass: "DESKTOP" | "NOTEBOOK";
+  deviceClass:
+    | "DESKTOP"
+    | "NOTEBOOK";
 
   ipAddress: string | null;
 

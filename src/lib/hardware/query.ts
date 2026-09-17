@@ -10,6 +10,8 @@ import type {
   WindowsUpdateStatus,
 } from "@/types/hardware";
 
+import { compareWindowsBuild } from "@/lib/windows-update/compare";
+
 import { DEVICE_SOURCE } from "./schema";
 
 const RECENT_MONITOR_ROWS = 100000;
@@ -53,13 +55,8 @@ interface HardwareSourceRow {
   diskFreeBytes: number | string | null;
 }
 
-function toStringValue(
-  value: unknown,
-): string | null {
-  if (
-    value === null ||
-    value === undefined
-  ) {
+function toStringValue(value: unknown): string | null {
+  if (value === null || value === undefined) {
     return null;
   }
 
@@ -68,76 +65,48 @@ function toStringValue(
   return result.length > 0 ? result : null;
 }
 
-function toNumber(
-  value: unknown,
-): number | null {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
     return null;
   }
 
   const result = Number(value);
 
-  return Number.isFinite(result)
-    ? result
-    : null;
+  return Number.isFinite(result) ? result : null;
 }
 
-function toBoolean(
-  value: unknown,
-): boolean {
-  if (
-    value === true ||
-    value === 1
-  ) {
+function toBoolean(value: unknown): boolean {
+  if (value === true || value === 1) {
     return true;
   }
 
   if (typeof value === "string") {
-    return (
-      value.toLowerCase() === "true" ||
-      value === "1"
-    );
+    return value.toLowerCase() === "true" || value === "1";
   }
 
   return false;
 }
 
-function toIso(
-  value: unknown,
-): string | null {
+function toIso(value: unknown): string | null {
   if (!value) {
     return null;
   }
 
-  const date =
-    value instanceof Date
-      ? value
-      : new Date(String(value));
+  const date = value instanceof Date ? value : new Date(String(value));
 
-  if (
-    Number.isNaN(date.getTime())
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return null;
   }
 
   return date.toISOString();
 }
 
-function clampPercent(
-  value: number | null,
-): number | null {
+function clampPercent(value: number | null): number | null {
   if (value === null) {
     return null;
   }
 
-  return Math.max(
-    0,
-    Math.min(100, value),
-  );
+  return Math.max(0, Math.min(100, value));
 }
 
 /**
@@ -150,15 +119,10 @@ function clampPercent(
  * - MB
  * - GB
  */
-function memoryToGb(
-  value: unknown,
-): number | null {
+function memoryToGb(value: unknown): number | null {
   const number = toNumber(value);
 
-  if (
-    number === null ||
-    number <= 0
-  ) {
+  if (number === null || number <= 0) {
     return null;
   }
 
@@ -177,15 +141,10 @@ function memoryToGb(
   return number;
 }
 
-function bytesToGb(
-  value: unknown,
-): number | null {
+function bytesToGb(value: unknown): number | null {
   const number = toNumber(value);
 
-  if (
-    number === null ||
-    number <= 0
-  ) {
+  if (number === null || number <= 0) {
     return null;
   }
 
@@ -209,177 +168,102 @@ function calculateStatus({
     return "OFFLINE";
   }
 
-  if (
-    !performanceAt &&
-    cpu === null &&
-    memory === null &&
-    disk === null
-  ) {
+  if (!performanceAt && cpu === null && memory === null && disk === null) {
     return "UNKNOWN";
   }
 
-  const metrics = [
-    cpu,
-    memory,
-    disk,
-  ].filter(
-    (value): value is number =>
-      value !== null,
+  const metrics = [cpu, memory, disk].filter(
+    (value): value is number => value !== null,
   );
 
   if (metrics.length === 0) {
     return "UNKNOWN";
   }
 
-  if (
-    metrics.some(
-      (value) => value >= 90,
-    )
-  ) {
+  if (metrics.some((value) => value >= 90)) {
     return "CRITICAL";
   }
 
-  if (
-    metrics.some(
-      (value) => value >= 80,
-    )
-  ) {
+  if (metrics.some((value) => value >= 80)) {
     return "WARNING";
   }
 
   return "HEALTHY";
 }
 
-function calculatePerformanceAge(
-  value: string | null,
-): number | null {
+function calculatePerformanceAge(value: string | null): number | null {
   if (!value) {
     return null;
   }
 
-  const timestamp =
-    new Date(value).getTime();
+  const timestamp = new Date(value).getTime();
 
   if (Number.isNaN(timestamp)) {
     return null;
   }
 
-  return Math.max(
-    0,
-    Math.floor(
-      (Date.now() - timestamp) /
-        1000,
-    ),
-  );
+  return Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
 }
 
-function mapRow(
-  row: HardwareSourceRow,
-): Hardware {
+function mapRow(row: HardwareSourceRow): Hardware {
   const id =
-    toStringValue(row.agentId) ??
-    toStringValue(row.hostname) ??
-    "unknown";
+    toStringValue(row.agentId) ?? toStringValue(row.hostname) ?? "unknown";
 
-  const hostname =
-    toStringValue(row.hostname) ??
-    id;
+  const hostname = toStringValue(row.hostname) ?? id;
 
-  const online =
-    toBoolean(row.online);
+  const online = toBoolean(row.online);
 
-  const performanceAt =
-    toIso(row.monitorCurrentTime);
+  const performanceAt = toIso(row.monitorCurrentTime);
 
-  const cpu =
-    clampPercent(
-      toNumber(row.monitorCpu),
-    );
+  const cpu = clampPercent(toNumber(row.monitorCpu));
 
-  const historyTotalMemoryGb =
-    memoryToGb(
-      row.monitorTotalMem,
-    );
+  const historyTotalMemoryGb = memoryToGb(row.monitorTotalMem);
 
-  const historyAvailableMemoryGb =
-    memoryToGb(
-      row.monitorAvailableMem,
-    );
+  const historyAvailableMemoryGb = memoryToGb(row.monitorAvailableMem);
 
-  const memoryTotalGb =
-    historyTotalMemoryGb ??
-    toNumber(row.memoryTotalGb);
+  const memoryTotalGb = historyTotalMemoryGb ?? toNumber(row.memoryTotalGb);
 
   const memoryUsedGb =
-    memoryTotalGb !== null &&
-    historyAvailableMemoryGb !== null
-      ? Math.max(
-          0,
-          memoryTotalGb -
-            historyAvailableMemoryGb,
-        )
+    memoryTotalGb !== null && historyAvailableMemoryGb !== null
+      ? Math.max(0, memoryTotalGb - historyAvailableMemoryGb)
       : null;
 
   const memory =
-    memoryTotalGb !== null &&
-    memoryUsedGb !== null &&
-    memoryTotalGb > 0
-      ? clampPercent(
-          (memoryUsedGb /
-            memoryTotalGb) *
-            100,
-        )
+    memoryTotalGb !== null && memoryUsedGb !== null && memoryTotalGb > 0
+      ? clampPercent((memoryUsedGb / memoryTotalGb) * 100)
       : null;
 
   const diskTotalGb =
-    bytesToGb(
-      row.diskTotalBytes,
-    ) ??
-    toNumber(row.diskTotalGb);
+    bytesToGb(row.diskTotalBytes) ?? toNumber(row.diskTotalGb);
 
-  const diskFreeGb =
-    bytesToGb(
-      row.diskFreeBytes,
-    );
+  const diskFreeGb = bytesToGb(row.diskFreeBytes);
 
   const diskUsedGb =
-    diskTotalGb !== null &&
-    diskFreeGb !== null
-      ? Math.max(
-          0,
-          diskTotalGb -
-            diskFreeGb,
-        )
+    diskTotalGb !== null && diskFreeGb !== null
+      ? Math.max(0, diskTotalGb - diskFreeGb)
       : null;
 
   const disk =
-    diskTotalGb !== null &&
-    diskUsedGb !== null &&
-    diskTotalGb > 0
-      ? clampPercent(
-          (diskUsedGb /
-            diskTotalGb) *
-            100,
-        )
+    diskTotalGb !== null && diskUsedGb !== null && diskTotalGb > 0
+      ? clampPercent((diskUsedGb / diskTotalGb) * 100)
       : null;
 
-  const status =
-    calculateStatus({
-      online,
-      cpu,
-      memory,
-      disk,
-      performanceAt,
-    });
+  const status = calculateStatus({
+    online,
+    cpu,
+    memory,
+    disk,
+    performanceAt,
+  });
 
-  const deviceClass =
-    row.deviceClass ===
-    "NOTEBOOK"
-      ? "NOTEBOOK"
-      : "DESKTOP";
+  const deviceClass = row.deviceClass === "NOTEBOOK" ? "NOTEBOOK" : "DESKTOP";
 
-  const windowsUpdate: WindowsUpdateStatus =
-    "UNKNOWN";
+  const windowsUpdateComparison = compareWindowsBuild(
+    row.windowsVersion,
+    row.windowsBuild,
+  );
+
+  const windowsUpdate: WindowsUpdateStatus = windowsUpdateComparison.status;
 
   return {
     id,
@@ -387,31 +271,17 @@ function mapRow(
 
     deviceClass,
 
-    ipAddress:
-      toStringValue(
-        row.ipAddress,
-      ),
+    ipAddress: toStringValue(row.ipAddress),
 
-    user:
-      toStringValue(row.user) ??
-      "-",
+    user: toStringValue(row.user) ?? "-",
 
-    department:
-      toStringValue(
-        row.department,
-      ) ?? "-",
+    department: toStringValue(row.department) ?? "-",
 
-    location:
-      toStringValue(
-        row.location,
-      ),
+    location: toStringValue(row.location),
 
     cpu,
 
-    cpuName:
-      toStringValue(
-        row.cpuName,
-      ),
+    cpuName: toStringValue(row.cpuName),
 
     memory,
 
@@ -425,45 +295,25 @@ function mapRow(
 
     diskTotalGb,
 
-    windowsVersion:
-      toStringValue(
-        row.windowsVersion,
-      ),
+    windowsVersion: toStringValue(row.windowsVersion),
 
-    windowsBuild:
-      toStringValue(
-        row.windowsBuild,
-      ),
+    windowsBuild: toStringValue(row.windowsBuild),
 
     windowsUpdate,
 
-    lastContact:
-      toIso(row.lastSeen),
+    lastContact: toIso(row.lastSeen),
 
     performanceAt,
 
-    performanceAgeSeconds:
-      calculatePerformanceAge(
-        performanceAt,
-      ),
+    performanceAgeSeconds: calculatePerformanceAge(performanceAt),
 
-    manufacturer:
-      toStringValue(
-        row.manufacturer,
-      ),
+    manufacturer: toStringValue(row.manufacturer),
 
-    model:
-      toStringValue(row.model),
+    model: toStringValue(row.model),
 
-    serialNumber:
-      toStringValue(
-        row.serialNumber,
-      ),
+    serialNumber: toStringValue(row.serialNumber),
 
-    agentVersion:
-      toStringValue(
-        row.agentVersion,
-      ),
+    agentVersion: toStringValue(row.agentVersion),
 
     status,
   };
@@ -509,23 +359,13 @@ function addFilters(
       )
     `);
 
-    request.input(
-      "search",
-      sql.NVarChar(200),
-      `%${search.trim()}%`,
-    );
+    request.input("search", sql.NVarChar(200), `%${search.trim()}%`);
   }
 
-  return conditions.length
-    ? `WHERE ${conditions.join(
-        "\nAND ",
-      )}`
-    : "";
+  return conditions.length ? `WHERE ${conditions.join("\nAND ")}` : "";
 }
 
-function hardwareQuery(
-  filter: string,
-): string {
+function hardwareQuery(filter: string): string {
   return `
     WITH recent_monitor AS (
       SELECT TOP (${RECENT_MONITOR_ROWS})
@@ -593,122 +433,66 @@ function hardwareQuery(
   `;
 }
 
-export async function getHardwareList(
-  params?: {
-    type?: HardwareDeviceType;
-    search?: string;
-  },
-): Promise<Hardware[]> {
+export async function getHardwareList(params?: {
+  type?: HardwareDeviceType;
+  search?: string;
+}): Promise<Hardware[]> {
   const db = await getDb();
 
-  const type =
-    params?.type ?? "ALL";
+  const type = params?.type ?? "ALL";
 
-  const search =
-    params?.search ?? "";
+  const search = params?.search ?? "";
 
-  const request =
-    db.request();
+  const request = db.request();
 
-  const filter =
-    addFilters(
-      request,
-      type,
-      search,
-    );
+  const filter = addFilters(request, type, search);
 
-  const result =
-    await request.query(
-      hardwareQuery(filter),
-    );
+  const result = await request.query(hardwareQuery(filter));
 
-  return (
-    result.recordset as HardwareSourceRow[]
-  ).map(mapRow);
+  return (result.recordset as HardwareSourceRow[]).map(mapRow);
 }
 
 export async function getHardwareSummary(
   type: HardwareDeviceType = "ALL",
 ): Promise<HardwareSummary> {
-  const rows =
-    await getHardwareList({
-      type,
-      search: "",
-    });
+  const rows = await getHardwareList({
+    type,
+    search: "",
+  });
 
   return {
     total: rows.length,
 
-    healthy: rows.filter(
-      (row) =>
-        row.status ===
-        "HEALTHY",
-    ).length,
+    healthy: rows.filter((row) => row.status === "HEALTHY").length,
 
-    warning: rows.filter(
-      (row) =>
-        row.status ===
-        "WARNING",
-    ).length,
+    warning: rows.filter((row) => row.status === "WARNING").length,
 
-    critical: rows.filter(
-      (row) =>
-        row.status ===
-        "CRITICAL",
-    ).length,
+    critical: rows.filter((row) => row.status === "CRITICAL").length,
 
-    offline: rows.filter(
-      (row) =>
-        row.status ===
-        "OFFLINE",
-    ).length,
+    offline: rows.filter((row) => row.status === "OFFLINE").length,
 
-    unknown: rows.filter(
-      (row) =>
-        row.status ===
-        "UNKNOWN",
-    ).length,
+    unknown: rows.filter((row) => row.status === "UNKNOWN").length,
 
     updatePending: rows.filter(
       (row) =>
-        row.windowsUpdate ===
-          "PENDING" ||
-        row.windowsUpdate ===
-          "FAILED" ||
-        row.windowsUpdate ===
-          "REBOOT_REQUIRED",
+        row.windowsUpdate === "UPDATE_AVAILABLE" ||
+        row.windowsUpdate === "UNSUPPORTED_VERSION",
     ).length,
 
-    desktop: rows.filter(
-      (row) =>
-        row.deviceClass ===
-        "DESKTOP",
-    ).length,
+    desktop: rows.filter((row) => row.deviceClass === "DESKTOP").length,
 
-    notebook: rows.filter(
-      (row) =>
-        row.deviceClass ===
-        "NOTEBOOK",
-    ).length,
+    notebook: rows.filter((row) => row.deviceClass === "NOTEBOOK").length,
   };
 }
 
-export async function getHardwareById(
-  id: string,
-): Promise<Hardware | null> {
+export async function getHardwareById(id: string): Promise<Hardware | null> {
   const db = await getDb();
 
-  const request =
-    db.request();
+  const request = db.request();
 
-  request.input(
-    "id",
-    sql.NVarChar(100),
-    id,
-  );
+  request.input("id", sql.NVarChar(100), id);
 
-  const result =
-    await request.query(`
+  const result = await request.query(`
       WITH recent_monitor AS (
         SELECT TOP (${RECENT_MONITOR_ROWS})
           mh.ID,
@@ -774,21 +558,13 @@ export async function getHardwareById(
         OR dev.hostname = @id
     `);
 
-  const row =
-    result.recordset[0] as
-      | HardwareSourceRow
-      | undefined;
+  const row = result.recordset[0] as HardwareSourceRow | undefined;
 
   if (!row) {
     return null;
   }
 
-  if (
-    row.deviceClass !==
-      "DESKTOP" &&
-    row.deviceClass !==
-      "NOTEBOOK"
-  ) {
+  if (row.deviceClass !== "DESKTOP" && row.deviceClass !== "NOTEBOOK") {
     return null;
   }
 

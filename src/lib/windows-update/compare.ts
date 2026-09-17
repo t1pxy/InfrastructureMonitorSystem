@@ -1,5 +1,6 @@
 import {
   GENERATED_ON,
+  SOURCE_URL,
   WINDOWS_BUILDS,
   type WindowsBuild,
   type WindowsRevision,
@@ -14,7 +15,7 @@ export type WindowsComplianceStatus =
 export type WindowsComplianceResult = {
   status: WindowsComplianceStatus;
 
-  version: string | null;
+  currentVersion: string | null;
 
   currentBuild: string | null;
 
@@ -26,15 +27,12 @@ export type WindowsComplianceResult = {
 
   revisionsBehind: number | null;
 
-  endOfServicing: string | null;
+  endOfUpdates: string | null;
 
   sourceUrl: string;
 
   generatedOn: string;
 };
-
-const SOURCE_URL =
-  "https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information";
 
 const BUILD_VERSION_MAP: Record<string, string> = {
   "28000": "26H1",
@@ -56,13 +54,13 @@ function clean(value: string): string {
 export function normalizeVersion(
   value: string | null | undefined,
 ): string | null {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
-  const normalized = value.trim();
-
-  const match = normalized.match(
-    /\b(\d{2}H[12])\b/i,
-  );
+  const match = value
+    .trim()
+    .match(/\b(\d{2}H[12])\b/i);
 
   if (!match) {
     return null;
@@ -81,13 +79,12 @@ export type ParsedWindowsBuild = {
 export function parseBuild(
   value: string | null | undefined,
 ): ParsedWindowsBuild | null {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   const normalized = clean(value);
 
-  /*
-   * 10.0.26200.9445
-   */
   let match = normalized.match(
     /10\.0\.(\d{5})\.(\d{1,6})/,
   );
@@ -101,9 +98,6 @@ export function parseBuild(
     };
   }
 
-  /*
-   * 26200.9445
-   */
   match = normalized.match(
     /\b(\d{5})\.(\d{1,6})\b/,
   );
@@ -117,9 +111,6 @@ export function parseBuild(
     };
   }
 
-  /*
-   * 10.0.26200
-   */
   match = normalized.match(
     /10\.0\.(\d{5})\b/,
   );
@@ -133,9 +124,6 @@ export function parseBuild(
     };
   }
 
-  /*
-   * 26200
-   */
   match = normalized.match(
     /\b(\d{5})\b/,
   );
@@ -152,14 +140,17 @@ export function parseBuild(
   return null;
 }
 
-export function inferVersionFromBuild(
+function inferVersionFromBuild(
   build: ParsedWindowsBuild | null,
 ): string | null {
   if (!build) {
     return null;
   }
 
-  return BUILD_VERSION_MAP[String(build.major)] ?? null;
+  return (
+    BUILD_VERSION_MAP[String(build.major)] ??
+    null
+  );
 }
 
 function getBuildInfoByVersion(
@@ -174,7 +165,8 @@ function getBuildInfoByVersion(
     WINDOWS_BUILDS,
   )) {
     if (
-      info.featureVersion?.toUpperCase() === target
+      info.featureVersion?.toUpperCase() ===
+      target
     ) {
       return {
         buildNumber,
@@ -193,9 +185,11 @@ function getLatestRevision(
     return null;
   }
 
-  return [...info.revisions].sort(
-    (a, b) => b.ubr - a.ubr,
-  )[0] ?? null;
+  return (
+    [...info.revisions].sort(
+      (a, b) => b.ubr - a.ubr,
+    )[0] ?? null
+  );
 }
 
 function countRevisionsBehind(
@@ -216,27 +210,26 @@ export function compareWindowsBuild(
   windowsVersion: string | null | undefined,
   windowsBuild: string | null | undefined,
 ): WindowsComplianceResult {
-  const currentBuild = parseBuild(
-    windowsBuild,
-  );
+  const currentBuild =
+    parseBuild(windowsBuild);
 
-  const explicitVersion = normalizeVersion(
-    windowsVersion,
-  );
+  const explicitVersion =
+    normalizeVersion(windowsVersion);
 
   const inferredVersion =
     inferVersionFromBuild(currentBuild);
 
   const currentVersion =
-    explicitVersion ?? inferredVersion;
+    explicitVersion ??
+    inferredVersion;
 
-  /*
-   * ไม่มี Build หรือ Version
-   */
-  if (!currentBuild || !currentVersion) {
+  if (
+    !currentBuild ||
+    !currentVersion
+  ) {
     return {
       status: "UNKNOWN",
-      version: currentVersion,
+      currentVersion,
       currentBuild:
         currentBuild?.value ??
         windowsBuild ??
@@ -245,29 +238,28 @@ export function compareWindowsBuild(
       latestKb: null,
       latestReleaseDate: null,
       revisionsBehind: null,
-      endOfServicing: null,
+      endOfUpdates: null,
       sourceUrl: SOURCE_URL,
       generatedOn: GENERATED_ON,
     };
   }
 
-  /*
-   * หา release history ของ version นี้
-   */
-  const release = getBuildInfoByVersion(
-    currentVersion,
-  );
+  const release =
+    getBuildInfoByVersion(
+      currentVersion,
+    );
 
   if (!release) {
     return {
       status: "UNKNOWN",
-      version: currentVersion,
-      currentBuild: currentBuild.value,
+      currentVersion,
+      currentBuild:
+        currentBuild.value,
       latestBuild: null,
       latestKb: null,
       latestReleaseDate: null,
       revisionsBehind: null,
-      endOfServicing: null,
+      endOfUpdates: null,
       sourceUrl: SOURCE_URL,
       generatedOn: GENERATED_ON,
     };
@@ -275,104 +267,97 @@ export function compareWindowsBuild(
 
   const { info } = release;
 
-  /*
-   * Version นี้หมด support แล้ว
-   */
-  if (info.ended) {
-    const latest = getLatestRevision(info);
+  const latest =
+    getLatestRevision(info);
 
+  if (!latest) {
+    return {
+      status: info.ended
+        ? "UNSUPPORTED_VERSION"
+        : "UNKNOWN",
+      currentVersion,
+      currentBuild:
+        currentBuild.value,
+      latestBuild: null,
+      latestKb: null,
+      latestReleaseDate: null,
+      revisionsBehind: null,
+      endOfUpdates:
+        info.endOfUpdates ??
+        null,
+      sourceUrl: SOURCE_URL,
+      generatedOn: GENERATED_ON,
+    };
+  }
+
+  if (info.ended) {
     return {
       status: "UNSUPPORTED_VERSION",
-      version: currentVersion,
-      currentBuild: currentBuild.value,
-      latestBuild: latest
-        ? `${release.buildNumber}.${latest.ubr}`
-        : null,
-      latestKb: latest?.kb ?? null,
-      latestReleaseDate: latest?.date ?? null,
+      currentVersion,
+      currentBuild:
+        currentBuild.value,
+      latestBuild: latest.build,
+      latestKb: latest.kb,
+      latestReleaseDate:
+        latest.date,
       revisionsBehind:
-        latest && currentBuild.hasUbr
+        currentBuild.hasUbr
           ? countRevisionsBehind(
               info,
               currentBuild.ubr,
               latest.ubr,
             )
           : null,
-      endOfServicing:
-        info.endOfServicing ?? null,
+      endOfUpdates:
+        info.endOfUpdates ??
+        null,
       sourceUrl: SOURCE_URL,
       generatedOn: GENERATED_ON,
     };
   }
 
-  const latest = getLatestRevision(info);
-
-  /*
-   * มี version แต่ไม่มี revision history
-   */
-  if (!latest) {
-    return {
-      status: "UNKNOWN",
-      version: currentVersion,
-      currentBuild: currentBuild.value,
-      latestBuild: null,
-      latestKb: null,
-      latestReleaseDate: null,
-      revisionsBehind: null,
-      endOfServicing:
-        info.endOfServicing ?? null,
-      sourceUrl: SOURCE_URL,
-      generatedOn: GENERATED_ON,
-    };
-  }
-
-  /*
-   * ถ้า MSSQL มีแค่ Build แต่ไม่มี UBR
-   * เราไม่ควรเดาว่าเครื่องล่าสุดหรือเก่า
-   */
   if (!currentBuild.hasUbr) {
     return {
       status: "UNKNOWN",
-      version: currentVersion,
-      currentBuild: currentBuild.value,
-      latestBuild:
-        `${release.buildNumber}.${latest.ubr}`,
+      currentVersion,
+      currentBuild:
+        currentBuild.value,
+      latestBuild: latest.build,
       latestKb: latest.kb,
-      latestReleaseDate: latest.date,
+      latestReleaseDate:
+        latest.date,
       revisionsBehind: null,
-      endOfServicing:
-        info.endOfServicing ?? null,
+      endOfUpdates:
+        info.endOfUpdates ??
+        null,
       sourceUrl: SOURCE_URL,
       generatedOn: GENERATED_ON,
     };
   }
 
-  const latestBuildValue =
+  const releaseBuildNumber =
     Number(release.buildNumber);
 
-  /*
-   * Major build mismatch
-   *
-   * เช่น current = 26100
-   * แต่ version บอกว่า 25H2
-   *
-   * ไม่เดา -> UNKNOWN
-   */
   if (
-    !Number.isFinite(latestBuildValue) ||
-    latestBuildValue !== currentBuild.major
+    !Number.isFinite(
+      releaseBuildNumber,
+    ) ||
+    releaseBuildNumber !==
+      currentBuild.major
   ) {
     return {
       status: "UNKNOWN",
-      version: currentVersion,
-      currentBuild: currentBuild.value,
-      latestBuild:
-        `${release.buildNumber}.${latest.ubr}`,
+      currentVersion,
+      currentBuild:
+        currentBuild.value,
+      latestBuild: latest.build,
       latestKb: latest.kb,
-      latestReleaseDate: latest.date,
+      latestReleaseDate:
+        latest.date,
       revisionsBehind: null,
-      endOfServicing:
-        info.endOfServicing ?? null,
+      endOfUpdates:
+        info.endOfUpdates ??
+        null,
       sourceUrl: SOURCE_URL,
       generatedOn: GENERATED_ON,
     };
@@ -385,40 +370,41 @@ export function compareWindowsBuild(
       latest.ubr,
     );
 
-  /*
-   * Current >= latest
-   */
-  if (currentBuild.ubr >= latest.ubr) {
+  if (
+    currentBuild.ubr >=
+    latest.ubr
+  ) {
     return {
       status: "CURRENT",
-      version: currentVersion,
-      currentBuild: currentBuild.value,
-      latestBuild:
-        `${release.buildNumber}.${latest.ubr}`,
+      currentVersion,
+      currentBuild:
+        currentBuild.value,
+      latestBuild: latest.build,
       latestKb: latest.kb,
-      latestReleaseDate: latest.date,
+      latestReleaseDate:
+        latest.date,
       revisionsBehind: 0,
-      endOfServicing:
-        info.endOfServicing ?? null,
+      endOfUpdates:
+        info.endOfUpdates ??
+        null,
       sourceUrl: SOURCE_URL,
       generatedOn: GENERATED_ON,
     };
   }
 
-  /*
-   * Current < latest
-   */
   return {
     status: "UPDATE_AVAILABLE",
-    version: currentVersion,
-    currentBuild: currentBuild.value,
-    latestBuild:
-      `${release.buildNumber}.${latest.ubr}`,
+    currentVersion,
+    currentBuild:
+      currentBuild.value,
+    latestBuild: latest.build,
     latestKb: latest.kb,
-    latestReleaseDate: latest.date,
+    latestReleaseDate:
+      latest.date,
     revisionsBehind,
-    endOfServicing:
-      info.endOfServicing ?? null,
+    endOfUpdates:
+      info.endOfUpdates ??
+      null,
     sourceUrl: SOURCE_URL,
     generatedOn: GENERATED_ON,
   };

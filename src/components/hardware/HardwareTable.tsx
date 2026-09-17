@@ -1,12 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Cpu,
-  Eye,
-  HardDrive,
-  MemoryStick,
-} from "lucide-react";
+import { Cpu, Eye, HardDrive, MemoryStick } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -93,10 +88,7 @@ function ResourceItem({
           <div
             className={`h-full rounded-full ${getBarClass(value)}`}
             style={{
-              width: `${Math.min(
-                100,
-                Math.max(0, value),
-              )}%`,
+              width: `${Math.min(100, Math.max(0, value))}%`,
             }}
           />
         </div>
@@ -109,6 +101,22 @@ function ResourceItem({
       )}
     </div>
   );
+}
+
+function getWindowsUpdateLabel(status: Hardware["windowsUpdate"]) {
+  switch (status) {
+    case "CURRENT":
+      return "ล่าสุด";
+
+    case "UPDATE_AVAILABLE":
+      return "ต้องอัปเดต";
+
+    case "UNSUPPORTED_VERSION":
+      return "หมดระยะรองรับ";
+
+    default:
+      return "ไม่ทราบ";
+  }
 }
 
 export default function HardwareTable({
@@ -164,9 +172,7 @@ export default function HardwareTable({
               Status
             </th>
 
-            <th className="w-[3%] px-2 py-3 text-right font-semibold">
-              {" "}
-            </th>
+            <th className="w-[3%] px-2 py-3 text-right font-semibold"> </th>
           </tr>
         </thead>
 
@@ -183,9 +189,7 @@ export default function HardwareTable({
           ) : (
             rows.map((row, index) => {
               const rowKey =
-                row.id ||
-                row.hostname ||
-                `hardware-${start + index}`;
+                row.id || row.hostname || `hardware-${start + index}`;
 
               return (
                 <tr
@@ -237,9 +241,7 @@ export default function HardwareTable({
                         icon={Cpu}
                         label="CPU"
                         value={row.cpu}
-                        detail={
-                          row.cpuName || undefined
-                        }
+                        detail={row.cpuName || undefined}
                       />
 
                       <ResourceItem
@@ -248,9 +250,7 @@ export default function HardwareTable({
                         value={row.memory}
                         detail={
                           row.memoryTotalGb !== null
-                            ? `${formatGb(
-                                row.memoryUsedGb,
-                              )} / ${formatGb(
+                            ? `${formatGb(row.memoryUsedGb)} / ${formatGb(
                                 row.memoryTotalGb,
                               )}`
                             : undefined
@@ -263,9 +263,7 @@ export default function HardwareTable({
                         value={row.disk}
                         detail={
                           row.diskTotalGb !== null
-                            ? `${formatGb(
-                                row.diskUsedGb,
-                              )} / ${formatGb(
+                            ? `${formatGb(row.diskUsedGb)} / ${formatGb(
                                 row.diskTotalGb,
                               )}`
                             : undefined
@@ -291,7 +289,7 @@ export default function HardwareTable({
                       )}
 
                       <div className="mt-1 text-[10px] text-muted-foreground">
-                        Update: {row.windowsUpdate}
+                        Update: {getWindowsUpdateLabel(row.windowsUpdate)}
                       </div>
                     </div>
                   </td>
@@ -299,10 +297,7 @@ export default function HardwareTable({
                   {/* User / Department */}
                   <td className="px-3 py-3">
                     <div className="min-w-0">
-                      <div
-                        className="truncate font-medium"
-                        title={row.user}
-                      >
+                      <div className="truncate font-medium" title={row.user}>
                         {row.user || "-"}
                       </div>
 
@@ -328,10 +323,7 @@ export default function HardwareTable({
                   {/* Updated */}
                   <td className="px-3 py-3">
                     <div className="text-[11px]">
-                      {formatDate(
-                        row.performanceAt ||
-                          row.lastContact,
-                      )}
+                      {formatDate(row.performanceAt || row.lastContact)}
                     </div>
 
                     {row.performanceAgeSeconds !== null && (
@@ -347,16 +339,12 @@ export default function HardwareTable({
 
                   {/* Status */}
                   <td className="px-2 py-3 text-center">
-                    <HardwareStatusBadge
-                      status={row.status}
-                    />
+                    <HardwareStatusBadge status={row.status} />
                   </td>
 
                   {/* Action */}
                   <td className="px-2 py-3 text-right">
-                    <Link
-                      href={`/hardware/${encodeURIComponent(row.id)}`}
-                    >
+                    <Link href={`/hardware/${encodeURIComponent(row.id)}`}>
                       <Button
                         type="button"
                         variant="outline"

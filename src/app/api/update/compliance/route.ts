@@ -15,18 +15,24 @@ type RawHardwareRow = {
   hostname: string | null;
   deviceClass: string | null;
   ipAddress: string | null;
+
   user: string | null;
   department: string | null;
   location: string | null;
+
   online: boolean | number | null;
+
   manufacturer: string | null;
   model: string | null;
   serialNumber: string | null;
   agentVersion: string | null;
+
   windowsVersion: string | null;
   windowsBuild: string | null;
+
   memoryTotalGb: number | null;
   diskTotalGb: number | null;
+
   lastBoot: Date | string | null;
   cpuName: string | null;
   lastSeen: Date | string | null;
@@ -35,12 +41,17 @@ type RawHardwareRow = {
 type ComplianceDevice = {
   agentId: string | null;
   hostname: string;
+
   deviceClass: string | null;
+
   ipAddress: string | null;
+
   user: string | null;
   department: string | null;
   location: string | null;
+
   online: boolean;
+
   manufacturer: string | null;
   model: string | null;
   serialNumber: string | null;
@@ -51,6 +62,7 @@ type ComplianceDevice = {
 
   memoryTotalGb: number | null;
   diskTotalGb: number | null;
+
   lastBoot: string | null;
   cpuName: string | null;
   lastSeen: string | null;
@@ -71,9 +83,14 @@ function toIso(
     return value.toISOString();
   }
 
-  const parsed = new Date(value);
+  const parsed =
+    new Date(value);
 
-  if (Number.isNaN(parsed.getTime())) {
+  if (
+    Number.isNaN(
+      parsed.getTime(),
+    )
+  ) {
     return null;
   }
 
@@ -81,7 +98,11 @@ function toIso(
 }
 
 function toBoolean(
-  value: boolean | number | null | undefined,
+  value:
+    | boolean
+    | number
+    | null
+    | undefined,
 ): boolean {
   if (typeof value === "boolean") {
     return value;
@@ -93,25 +114,21 @@ function toBoolean(
 function normaliseHostname(
   value: string | null | undefined,
 ): string {
-  return String(value ?? "").trim();
+  return String(
+    value ?? "",
+  ).trim();
 }
 
 function isManagedComputer(
   hostname: string,
 ): boolean {
-  /*
-   * User naming convention:
-   *
-   * 22RDT107
-   * 22RNB025
-   *
-   * RDT = Desktop
-   * RNB = Notebook
-   */
-
   return (
-    /^\d{2}RDT\d{3}$/i.test(hostname) ||
-    /^\d{2}RNB\d{3}$/i.test(hostname)
+    /^\d{2}RDT\d{3}$/i.test(
+      hostname,
+    ) ||
+    /^\d{2}RNB\d{3}$/i.test(
+      hostname,
+    )
   );
 }
 
@@ -120,8 +137,10 @@ function isComplianceStatus(
 ): boolean {
   return (
     value === "CURRENT" ||
-    value === "UPDATE_AVAILABLE" ||
-    value === "UNSUPPORTED_VERSION" ||
+    value ===
+      "UPDATE_AVAILABLE" ||
+    value ===
+      "UNSUPPORTED_VERSION" ||
     value === "UNKNOWN"
   );
 }
@@ -131,39 +150,40 @@ export async function GET() {
     const db = await getDb();
 
     const result =
-      await db
-        .request()
-        .query<RawHardwareRow>(`
-          SELECT
-            agentId,
-            hostname,
-            deviceClass,
-            ipAddress,
-            [user],
-            department,
-            location,
-            online,
-            manufacturer,
-            model,
-            serialNumber,
-            agentVersion,
-            windowsVersion,
-            windowsBuild,
-            memoryTotalGb,
-            diskTotalGb,
-            lastBoot,
-            cpuName,
-            lastSeen
-          FROM (
-            ${DEVICE_SOURCE}
-          ) AS d
-          WHERE
-            UPPER(COALESCE(deviceClass, '')) = 'COMPUTER'
-          ORDER BY
-            hostname ASC;
-        `);
+      await db.request().query<RawHardwareRow>(`
+        SELECT
+          agentId,
+          hostname,
+          deviceClass,
+          ipAddress,
+          [user],
+          department,
+          location,
+          online,
+          manufacturer,
+          model,
+          serialNumber,
+          agentVersion,
+          windowsVersion,
+          windowsBuild,
+          memoryTotalGb,
+          diskTotalGb,
+          lastBoot,
+          cpuName,
+          lastSeen
+        FROM (
+          ${DEVICE_SOURCE}
+        ) d
+        WHERE
+          deviceClass IN (
+            'DESKTOP',
+            'NOTEBOOK'
+          )
+        ORDER BY
+          hostname
+      `);
 
-    const devices: ComplianceDevice[] =
+    const devices =
       result.recordset
         .map((row) => {
           const hostname =
@@ -171,7 +191,11 @@ export async function GET() {
               row.hostname,
             );
 
-          if (!isManagedComputer(hostname)) {
+          if (
+            !isManagedComputer(
+              hostname,
+            )
+          ) {
             return null;
           }
 
@@ -189,71 +213,93 @@ export async function GET() {
             return null;
           }
 
-          return {
-            agentId: row.agentId,
+          const device:
+            ComplianceDevice = {
+            agentId:
+              row.agentId,
+
             hostname,
-            deviceClass: row.deviceClass,
+
+            deviceClass:
+              row.deviceClass,
 
             ipAddress:
-              row.ipAddress ?? null,
+              row.ipAddress ??
+              null,
 
-            user: row.user ?? null,
+            user:
+              row.user ?? null,
 
             department:
-              row.department ?? null,
+              row.department ??
+              null,
 
             location:
-              row.location ?? null,
+              row.location ??
+              null,
 
-            online: toBoolean(
-              row.online,
-            ),
+            online:
+              toBoolean(
+                row.online,
+              ),
 
             manufacturer:
-              row.manufacturer ?? null,
+              row.manufacturer ??
+              null,
 
             model:
               row.model ?? null,
 
             serialNumber:
-              row.serialNumber ?? null,
+              row.serialNumber ??
+              null,
 
             agentVersion:
-              row.agentVersion ?? null,
+              row.agentVersion ??
+              null,
 
             windowsVersion:
-              row.windowsVersion ?? null,
+              row.windowsVersion ??
+              null,
 
             windowsBuild:
-              row.windowsBuild ?? null,
+              row.windowsBuild ??
+              null,
 
             memoryTotalGb:
-              row.memoryTotalGb == null
+              row.memoryTotalGb ==
+              null
                 ? null
                 : Number(
                     row.memoryTotalGb,
                   ),
 
             diskTotalGb:
-              row.diskTotalGb == null
+              row.diskTotalGb ==
+              null
                 ? null
                 : Number(
                     row.diskTotalGb,
                   ),
 
-            lastBoot: toIso(
-              row.lastBoot,
-            ),
+            lastBoot:
+              toIso(
+                row.lastBoot,
+              ),
 
             cpuName:
-              row.cpuName ?? null,
+              row.cpuName ??
+              null,
 
-            lastSeen: toIso(
-              row.lastSeen,
-            ),
+            lastSeen:
+              toIso(
+                row.lastSeen,
+              ),
 
             comparison,
           };
+
+          return device;
         })
         .filter(
           (
@@ -263,65 +309,39 @@ export async function GET() {
         );
 
     const summary = {
-      total: devices.length,
+      total:
+        devices.length,
 
-      current: devices.filter(
-        (device) =>
-          device.comparison.status ===
-          "CURRENT",
-      ).length,
+      current:
+        devices.filter(
+          (device) =>
+            device.comparison
+              .status ===
+            "CURRENT",
+        ).length,
 
       updateAvailable:
         devices.filter(
           (device) =>
-            device.comparison.status ===
+            device.comparison
+              .status ===
             "UPDATE_AVAILABLE",
         ).length,
 
       unsupported:
         devices.filter(
           (device) =>
-            device.comparison.status ===
+            device.comparison
+              .status ===
             "UNSUPPORTED_VERSION",
         ).length,
 
-      unknown: devices.filter(
-        (device) =>
-          device.comparison.status ===
-          "UNKNOWN",
-      ).length,
-    };
-
-    /*
-     * Useful diagnostics for checking whether
-     * the MSSQL side is actually providing
-     * Windows Build information.
-     */
-    const dataQuality = {
-      devicesWithWindowsVersion:
+      unknown:
         devices.filter(
           (device) =>
-            Boolean(
-              device.windowsVersion,
-            ),
-        ).length,
-
-      devicesWithWindowsBuild:
-        devices.filter(
-          (device) =>
-            Boolean(
-              device.windowsBuild,
-            ),
-        ).length,
-
-      devicesWithCompleteWindowsBuild:
-        devices.filter(
-          (device) =>
-            Boolean(
-              device.windowsBuild?.includes(
-                ".",
-              ),
-            ),
+            device.comparison
+              .status ===
+            "UNKNOWN",
         ).length,
     };
 
@@ -329,9 +349,10 @@ export async function GET() {
       {
         ok: true,
 
-        summary,
+        generatedOn:
+          new Date().toISOString(),
 
-        dataQuality,
+        summary,
 
         devices,
       },
