@@ -73,7 +73,7 @@ export default function NvrPage() {
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div><h1 className="text-2xl font-bold tracking-tight">Hikvision NVR Monitor</h1><p className="mt-1 text-sm text-muted-foreground">Monitor NVR status, CCTV channels and storage.</p></div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => { setEditing(null); setConfigOpen(true); }}><Settings className="mr-2 h-4 w-4" />Add NVR</Button>
+          <Link href="/hikvision/config" className="inline-flex h-9 items-center justify-center rounded-lg border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"><Settings className="mr-2 h-4 w-4" />Advanced Config</Link><Button onClick={() => { setEditing(null); setConfigOpen(true); }}><Settings className="mr-2 h-4 w-4" />Add NVR</Button>
           <Link href="/cctv" className="inline-flex h-9 items-center justify-center rounded-lg border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"><Video className="mr-2 h-4 w-4" />View All CCTV<ArrowRight className="ml-2 h-4 w-4" /></Link>
           <Button variant="outline" onClick={refresh} disabled={refreshing}><RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Refresh</Button>
         </div>
