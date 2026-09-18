@@ -1,78 +1,1067 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock, HardDrive, Camera, RefreshCw, Save, Server, Shield, Wifi } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  CheckCircle2,
+  Clock,
+  HardDrive,
+  Camera,
+  Plus,
+  RefreshCw,
+  Save,
+  Server,
+  Shield,
+  Trash2,
+  Wifi,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type NvrConfig = { id:string; name:string; host:string; port?:number; protocol?:"http"|"https"; username:string; password:string; site?:string };
-type CameraConfig = { nvrId:string; channel:number; name?:string; ipAddress?:string|null; enabled?:boolean };
-type Method = "GET"|"POST"|"PUT"|"DELETE";
+type NvrConfig = {
+  id: string;
+  name: string;
+  host: string;
+  port?: number;
+  protocol?: "http" | "https";
+  username: string;
+  password: string;
+  site?: string;
+};
 
-const PRESETS = [
-  { label:"Device Info", method:"GET" as Method, path:"/ISAPI/System/deviceInfo", readOnly:true },
-  { label:"System Time", method:"GET" as Method, path:"/ISAPI/System/time", readOnly:false },
-  { label:"Network Interfaces", method:"GET" as Method, path:"/ISAPI/System/Network/interfaces", readOnly:false },
-  { label:"HDD / Storage", method:"GET" as Method, path:"/ISAPI/ContentMgmt/Storage/hdd", readOnly:true },
-  { label:"Camera Channels", method:"GET" as Method, path:"/ISAPI/ContentMgmt/InputProxy/channels", readOnly:true },
-  { label:"Camera Channel Status", method:"GET" as Method, path:"/ISAPI/ContentMgmt/InputProxy/channels/status", readOnly:true },
-  { label:"Users", method:"GET" as Method, path:"/ISAPI/Security/users", readOnly:false },
+type Form = Record<string, string>;
+type Tab = "overview" | "network" | "time" | "users" | "storage" | "cameras";
+
+const TABS: [Tab, string, any][] = [
+  ["overview", "Overview", Server],
+  ["network", "Network", Wifi],
+  ["time", "Date & Time", Clock],
+  ["users", "Users", Shield],
+  ["storage", "Storage", HardDrive],
+  ["cameras", "Camera", Camera],
 ];
 
+const ENDPOINTS: Record<Exclude<Tab, "overview">, string> = {
+  network: "/ISAPI/System/Network/interfaces",
+  time: "/ISAPI/System/time",
+  users: "/ISAPI/Security/users",
+  storage: "/ISAPI/ContentMgmt/Storage/hdd",
+  cameras: "/ISAPI/ContentMgmt/InputProxy/channels",
+};
 
-type Tab="overview"|"network"|"time"|"users"|"storage"|"cameras";
-type Form=Record<string,string>;
-const TABS:[Tab,string,any][]=[["overview","Overview",Server],["network","Network",Wifi],["time","Date & Time",Clock],["users","Users",Shield],["storage","Storage",HardDrive],["cameras","Camera",Camera]];
-const ENDPOINTS:any={network:"/ISAPI/System/Network/interfaces",time:"/ISAPI/System/time",users:"/ISAPI/Security/users",storage:"/ISAPI/ContentMgmt/Storage/hdd",cameras:"/ISAPI/ContentMgmt/InputProxy/channels"};
+const XML_NS = "http://www.hikvision.com/ver20/XMLSchema";
 
-export default function Page(){
- const [nvrs,setNvrs]=useState<NvrConfig[]>([]); const [selected,setSelected]=useState(""); const [nvr,setNvr]=useState<NvrConfig|null>(null);
- const [tab,setTab]=useState<Tab>("overview"); const [busy,setBusy]=useState(false); const [message,setMessage]=useState(""); const [error,setError]=useState("");
- const [form,setForm]=useState<Form>({}); const [rows,setRows]=useState<Form[]>([]);
- const load=async()=>{const r=await fetch("/api/hikvision/config",{cache:"no-store"});const j=await r.json();if(!r.ok||!j.success)throw new Error(j.error||"โหลด Config ไม่สำเร็จ");setNvrs(j.data.nvrs||[]);if(!selected&&j.data.nvrs?.[0])setSelected(j.data.nvrs[0].id)};
- const call=async(method:string,path:string,body="")=>{const r=await fetch("/api/hikvision/device",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nvrId:selected,method,path,body})});const j=await r.json();if(!r.ok||!j.success)throw new Error(j.error||"NVR request failed");return j.data.body||""};
- const value=(x:Element|Document,name:string,def="")=>Array.from(x.getElementsByTagName("*")).find(e=>e.localName===name)?.textContent?.trim()||def;
- const read=async()=>{if(!selected||tab==="overview")return;setBusy(true);setError("");try{const xml=await call("GET",ENDPOINTS[tab]);const d=new DOMParser().parseFromString(xml,"application/xml");
-   if(tab==="network"){const x=Array.from(d.getElementsByTagName("*")).find(e=>e.localName==="NetworkInterface");setForm({id:value(x||d,"id","1"),addressingType:value(x||d,"addressingType","static"),ipAddress:value(x||d,"ipAddress"),subnetMask:value(x||d,"subnetMask"),gateway:value(x||d,"DefaultGateway"),primaryDns:value(x||d,"PrimaryDNS"),secondaryDns:value(x||d,"SecondaryDNS"),mac:value(x||d,"MACAddress")})}
-   if(tab==="time")setForm({timeMode:value(d,"timeMode","NTP"),localTime:value(d,"localTime"),timeZone:value(d,"timeZone","ICT-7"),ntpServer:value(d,"address","pool.ntp.org")});
-   if(tab==="users"){const a=Array.from(d.getElementsByTagName("*")).filter(e=>e.localName==="User");setRows(a.map((x,i)=>({id:value(x,"id",String(i+1)),userName:value(x,"userName"),userLevel:value(x,"userLevel","Viewer"),inherent:value(x,"inherent","false")})))}
-   if(tab==="storage"){const a=Array.from(d.getElementsByTagName("*")).filter(e=>e.localName==="hdd");setRows(a.map((x,i)=>({id:value(x,"id",String(i+1)),name:value(x,"name",\`HDD \${i+1}\`),status:value(x,"status","unknown"),capacity:value(x,"capacity","0"),freeSpace:value(x,"freeSpace","0")})))}
-   if(tab==="cameras"){const a=Array.from(d.getElementsByTagName("*")).filter(e=>e.localName==="InputProxyChannel");setRows(a.map(x=>({id:value(x,"id"),name:value(x,"name"),ipAddress:value(x,"ipAddress"),managePortNo:value(x,"managePortNo","8000"),userName:value(x,"userName")})))}
-   setMessage("อ่านค่าจาก NVR สำเร็จ")
- }catch(e){setError(e instanceof Error?e.message:"อ่านข้อมูลไม่สำเร็จ")}finally{setBusy(false)}};
- useEffect(()=>{void load().catch(e=>setError(e.message))},[]);
- useEffect(()=>{const x=nvrs.find(v=>v.id===selected);setNvr(x?{...x,password:""}:null);setForm({});setRows([]);if(selected&&tab!=="overview")void read()},[selected,tab]);
- const save=async(path:string,xml:string,ok:string,method:"PUT"|"POST"="PUT")=>{setBusy(true);setError("");try{await call(method,path,xml);setMessage(ok);await read()}catch(e){setError(e instanceof Error?e.message:"บันทึกไม่สำเร็จ")}finally{setBusy(false)}};
- const saveNvr=async()=>{if(!nvr)return;setBusy(true);try{const r=await fetch("/api/hikvision/config",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({...nvr,type:"nvr",port:Number(nvr.port||80),password:nvr.password||undefined})});const j=await r.json();if(!r.ok||!j.success)throw new Error(j.error);setMessage("บันทึก Connection สำเร็จ");await load()}catch(e){setError(e instanceof Error?e.message:"บันทึกไม่สำเร็จ")}finally{setBusy(false)}};
- const update=(k:string,v:string)=>setForm(x=>({...x,[k]:v}));
- return <div className="space-y-6"><div className="flex items-center justify-between"><div><h1 className="text-2xl font-bold">Hikvision NVR Management</h1><p className="text-sm text-muted-foreground">จัดการ NVR จริงด้วย GUI Form ไม่ต้องเขียน XML</p></div><Button variant="outline" onClick={()=>void load()}><RefreshCw className="mr-2 h-4 w-4"/>Refresh</Button></div>
- {error&&<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}{message&&<div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{message}</div>}
- <div className="grid gap-6 xl:grid-cols-[270px_1fr]"><aside className="rounded-xl border p-4"><div className="mb-3 text-xs font-semibold text-muted-foreground">NVR DEVICES</div>{nvrs.map(x=><button key={x.id} onClick={()=>{setSelected(x.id);setTab("overview")}} className={"mb-2 w-full rounded-xl border p-3 text-left "+(selected===x.id?"bg-muted":"hover:bg-muted/50")}><b>{x.name||x.id}</b><div className="font-mono text-xs">{x.host}:{x.port||80}</div><div className="text-xs text-muted-foreground">{x.site||"-"}</div></button>)}</aside>
- <main className="rounded-xl border"><div className="border-b p-5">{nvr?<><h2 className="text-xl font-semibold">{nvr.name||nvr.id}</h2><p className="font-mono text-xs text-muted-foreground">{nvr.protocol||"http"}://{nvr.host}:{nvr.port||80}</p></>:<span>เลือก NVR</span>}</div>
- {nvr&&<><nav className="flex overflow-x-auto border-b">{TABS.map(([id,label,Icon])=><button key={id} onClick={()=>setTab(id)} className={"flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm "+(tab===id?"border-primary text-primary":"border-transparent text-muted-foreground")}><Icon className="h-4 w-4"/>{label}</button>)}</nav><div className="p-5">
- {tab==="overview"&&<Card title="NVR Connection" desc="ข้อมูลที่ระบบ Monitor ใช้เชื่อมต่อ NVR"><div className="grid gap-4 md:grid-cols-2">{field("NVR ID",<Input disabled value={nvr.id}/>)}{field("Name",<Input value={nvr.name} onChange={e=>setNvr({...nvr,name:e.target.value})}/>)}{field("Host / IP",<Input value={nvr.host} onChange={e=>setNvr({...nvr,host:e.target.value})}/>)}{field("Protocol",<Select value={nvr.protocol||"http"} onChange={v=>setNvr({...nvr,protocol:v as "http"|"https"})} options={["http","https"]}/>)}{field("Port",<Input type="number" value={nvr.port||80} onChange={e=>setNvr({...nvr,port:Number(e.target.value)})}/>)}{field("Site",<Input value={nvr.site||""} onChange={e=>setNvr({...nvr,site:e.target.value})}/>)}{field("Username",<Input value={nvr.username} onChange={e=>setNvr({...nvr,username:e.target.value})}/>)}{field("Password",<Input type="password" placeholder="ว่าง = ใช้รหัสเดิม" value={nvr.password} onChange={e=>setNvr({...nvr,password:e.target.value})}/>)}</div><div className="mt-5 flex justify-end"><Button disabled={busy} onClick={()=>void saveNvr()}><Save className="mr-2 h-4 w-4"/>Save Connection</Button></div></Card>}
- {tab==="network"&&<NetworkForm data={form} update={update} save={()=>save("/ISAPI/System/Network/interfaces",networkXml(form),"บันทึก Network สำเร็จ")}/>}
- {tab==="time"&&<TimeForm data={form} update={update} save={()=>save("/ISAPI/System/time",timeXml(form),"บันทึก Date & Time สำเร็จ")}/>}
- {tab==="users"&&<UsersForm rows={rows} setRows={setRows} save={(u)=>save(u.id==="new"?"/ISAPI/Security/users":\`/ISAPI/Security/users/\${u.id}\`,userXml(u),u.id==="new"?"เพิ่ม User สำเร็จ":"แก้ไข User สำเร็จ",u.id==="new"?"POST":"PUT")} del={u=>save(\`/ISAPI/Security/users/\${u.id}\`,"","ลบ User สำเร็จ","PUT")}/>}
- {tab==="storage"&&<StorageForm rows={rows}/>}
- {tab==="cameras"&&<CamerasForm rows={rows} setRows={setRows} save={c=>save(\`/ISAPI/ContentMgmt/InputProxy/channels/\${c.id}\`,cameraXml(c),"บันทึก Camera สำเร็จ")}/>}
- </div></>}</main></div></div>
+export default function Page() {
+  const [nvrs, setNvrs] = useState<NvrConfig[]>([]);
+  const [selected, setSelected] = useState("");
+  const [nvr, setNvr] = useState<NvrConfig | null>(null);
+  const [tab, setTab] = useState<Tab>("overview");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [form, setForm] = useState<Form>({});
+  const [rows, setRows] = useState<Form[]>([]);
+
+  const load = async () => {
+    const response = await fetch("/api/hikvision/config", { cache: "no-store" });
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      throw new Error(json.error || "โหลด Config ไม่สำเร็จ");
+    }
+    const list = json.data?.nvrs || [];
+    setNvrs(list);
+    if (!selected && list[0]) setSelected(list[0].id);
+  };
+
+  const call = async (
+    method: "GET" | "POST" | "PUT" | "DELETE",
+    path: string,
+    body = "",
+  ) => {
+    const response = await fetch("/api/hikvision/device", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nvrId: selected, method, path, body }),
+    });
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      throw new Error(json.error || "NVR request failed");
+    }
+    return json.data?.body || "";
+  };
+
+  const text = (root: Document | Element, name: string, fallback = "") => {
+    const node = Array.from(root.getElementsByTagName("*")).find(
+      (item) => item.localName === name,
+    );
+    return node?.textContent?.trim() || fallback;
+  };
+
+  const read = async () => {
+    if (!selected || tab === "overview") return;
+    setBusy(true);
+    setError("");
+    try {
+      const xml = await call("GET", ENDPOINTS[tab]);
+      const doc = new DOMParser().parseFromString(xml, "application/xml");
+
+      if (tab === "network") {
+        const iface =
+          Array.from(doc.getElementsByTagName("*")).find(
+            (item) => item.localName === "NetworkInterface",
+          ) || doc;
+        setForm({
+          id: text(iface, "id", "1"),
+          addressingType: text(iface, "addressingType", "static"),
+          ipAddress: text(iface, "ipAddress"),
+          subnetMask: text(iface, "subnetMask"),
+          gateway: text(iface, "DefaultGateway"),
+          primaryDns: text(iface, "PrimaryDNS"),
+          secondaryDns: text(iface, "SecondaryDNS"),
+          mac: text(iface, "MACAddress"),
+        });
+      }
+
+      if (tab === "time") {
+        setForm({
+          timeMode: text(doc, "timeMode", "NTP"),
+          localTime: text(doc, "localTime"),
+          timeZone: text(doc, "timeZone", "ICT-7"),
+          ntpServer: text(doc, "address", "pool.ntp.org"),
+        });
+      }
+
+      if (tab === "users") {
+        const users = Array.from(doc.getElementsByTagName("*")).filter(
+          (item) => item.localName === "User",
+        );
+        setRows(
+          users.map((item, index) => ({
+            id: text(item, "id", String(index + 1)),
+            userName: text(item, "userName"),
+            userLevel: text(item, "userLevel", "Viewer"),
+          })),
+        );
+      }
+
+      if (tab === "storage") {
+        const hdds = Array.from(doc.getElementsByTagName("*")).filter(
+          (item) => item.localName === "hdd",
+        );
+        setRows(
+          hdds.map((item, index) => ({
+            id: text(item, "id", String(index + 1)),
+            name: text(item, "name", "HDD " + (index + 1)),
+            status: text(item, "status", "unknown"),
+            capacity: text(item, "capacity", "0"),
+            freeSpace: text(item, "freeSpace", "0"),
+          })),
+        );
+      }
+
+      if (tab === "cameras") {
+        const cameras = Array.from(doc.getElementsByTagName("*")).filter(
+          (item) => item.localName === "InputProxyChannel",
+        );
+        setRows(
+          cameras.map((item) => ({
+            id: text(item, "id"),
+            name: text(item, "name"),
+            ipAddress: text(item, "ipAddress"),
+            managePortNo: text(item, "managePortNo", "8000"),
+            userName: text(item, "userName"),
+          })),
+        );
+      }
+
+      setMessage("อ่านค่าจาก NVR สำเร็จ");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "อ่านข้อมูลไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    void load().catch((e) => setError(e.message));
+  }, []);
+
+  useEffect(() => {
+    const found = nvrs.find((item) => item.id === selected);
+    setNvr(found ? { ...found, password: "" } : null);
+    setForm({});
+    setRows([]);
+    if (selected && tab !== "overview") void read();
+  }, [selected, tab]);
+
+  const update = (key: string, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveRequest = async (
+    path: string,
+    body: string,
+    successMessage: string,
+    method: "PUT" | "POST" = "PUT",
+  ) => {
+    setBusy(true);
+    setError("");
+    try {
+      await call(method, path, body);
+      setMessage(successMessage);
+      await read();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveNvr = async () => {
+    if (!nvr) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/hikvision/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...nvr,
+          type: "nvr",
+          port: Number(nvr.port || 80),
+          password: nvr.password || undefined,
+        }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || "บันทึกไม่สำเร็จ");
+      }
+      setMessage("บันทึก Connection สำเร็จ");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Hikvision NVR Management</h1>
+          <p className="text-sm text-muted-foreground">
+            จัดการ NVR จริงด้วย GUI Form ไม่ต้องกรอก XML
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => void load()}>
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Refresh
+        </Button>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+      {message && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+          <CheckCircle2 className="h-4 w-4" />
+          {message}
+        </div>
+      )}
+
+      <div className="grid gap-6 xl:grid-cols-[270px_1fr]">
+        <aside className="rounded-xl border p-4">
+          <div className="mb-3 text-xs font-semibold text-muted-foreground">
+            NVR DEVICES
+          </div>
+          {nvrs.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                setSelected(item.id);
+                setTab("overview");
+              }}
+              className={
+                "mb-2 w-full rounded-xl border p-3 text-left " +
+                (selected === item.id ? "bg-muted" : "hover:bg-muted/50")
+              }
+            >
+              <b>{item.name || item.id}</b>
+              <div className="font-mono text-xs">
+                {item.host}:{item.port || 80}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {item.site || "-"}
+              </div>
+            </button>
+          ))}
+        </aside>
+
+        <main className="rounded-xl border">
+          <div className="border-b p-5">
+            {nvr ? (
+              <>
+                <h2 className="text-xl font-semibold">{nvr.name || nvr.id}</h2>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {nvr.protocol || "http"}://{nvr.host}:{nvr.port || 80}
+                </p>
+              </>
+            ) : (
+              <span>เลือก NVR</span>
+            )}
+          </div>
+
+          {nvr && (
+            <>
+              <nav className="flex overflow-x-auto border-b">
+                {TABS.map(([id, label, Icon]) => (
+                  <button
+                    key={id}
+                    onClick={() => setTab(id)}
+                    className={
+                      "flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm " +
+                      (tab === id
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground")
+                    }
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </button>
+                ))}
+              </nav>
+
+              <div className="p-5">
+                {tab === "overview" && (
+                  <Card
+                    title="NVR Connection"
+                    desc="ข้อมูลที่ระบบ Monitor ใช้เชื่อมต่อ NVR"
+                  >
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {field("NVR ID", <Input disabled value={nvr.id} />)}
+                      {field(
+                        "Name",
+                        <Input
+                          value={nvr.name}
+                          onChange={(e) =>
+                            setNvr({ ...nvr, name: e.target.value })
+                          }
+                        />,
+                      )}
+                      {field(
+                        "Host / IP",
+                        <Input
+                          value={nvr.host}
+                          onChange={(e) =>
+                            setNvr({ ...nvr, host: e.target.value })
+                          }
+                        />,
+                      )}
+                      {field(
+                        "Protocol",
+                        <Select
+                          value={nvr.protocol || "http"}
+                          onChange={(value) =>
+                            setNvr({
+                              ...nvr,
+                              protocol: value as "http" | "https",
+                            })
+                          }
+                          options={["http", "https"]}
+                        />,
+                      )}
+                      {field(
+                        "Port",
+                        <Input
+                          type="number"
+                          value={nvr.port || 80}
+                          onChange={(e) =>
+                            setNvr({ ...nvr, port: Number(e.target.value) })
+                          }
+                        />,
+                      )}
+                      {field(
+                        "Site",
+                        <Input
+                          value={nvr.site || ""}
+                          onChange={(e) =>
+                            setNvr({ ...nvr, site: e.target.value })
+                          }
+                        />,
+                      )}
+                      {field(
+                        "Username",
+                        <Input
+                          value={nvr.username}
+                          onChange={(e) =>
+                            setNvr({ ...nvr, username: e.target.value })
+                          }
+                        />,
+                      )}
+                      {field(
+                        "Password",
+                        <Input
+                          type="password"
+                          placeholder="ว่าง = ใช้รหัสเดิม"
+                          value={nvr.password}
+                          onChange={(e) =>
+                            setNvr({ ...nvr, password: e.target.value })
+                          }
+                        />,
+                      )}
+                    </div>
+                    <Actions busy={busy} save={() => void saveNvr()} />
+                  </Card>
+                )}
+
+                {tab === "network" && (
+                  <NetworkForm
+                    data={form}
+                    update={update}
+                    busy={busy}
+                    save={() =>
+                      void saveRequest(
+                        "/ISAPI/System/Network/interfaces",
+                        networkXml(form),
+                        "บันทึก Network สำเร็จ",
+                      )
+                    }
+                  />
+                )}
+
+                {tab === "time" && (
+                  <TimeForm
+                    data={form}
+                    update={update}
+                    busy={busy}
+                    save={() =>
+                      void saveRequest(
+                        "/ISAPI/System/time",
+                        timeXml(form),
+                        "บันทึก Date & Time สำเร็จ",
+                      )
+                    }
+                  />
+                )}
+
+                {tab === "users" && (
+                  <UsersForm
+                    rows={rows}
+                    busy={busy}
+                    save={(user) => {
+                      const path =
+                        user.id === "new"
+                          ? "/ISAPI/Security/users"
+                          : "/ISAPI/Security/users/" + user.id;
+                      void saveRequest(
+                        path,
+                        userXml(user),
+                        user.id === "new"
+                          ? "เพิ่ม User สำเร็จ"
+                          : "แก้ไข User สำเร็จ",
+                        user.id === "new" ? "POST" : "PUT",
+                      );
+                    }}
+                    del={(user) =>
+                      void saveRequest(
+                        "/ISAPI/Security/users/" + user.id,
+                        "",
+                        "ลบ User สำเร็จ",
+                        "DELETE",
+                      )
+                    }
+                  />
+                )}
+
+                {tab === "storage" && <StorageForm rows={rows} />}
+
+                {tab === "cameras" && (
+                  <CamerasForm
+                    rows={rows}
+                    busy={busy}
+                    save={(camera) =>
+                      void saveRequest(
+                        "/ISAPI/ContentMgmt/InputProxy/channels/" + camera.id,
+                        cameraXml(camera),
+                        "บันทึก Camera สำเร็จ",
+                      )
+                    }
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </main>
+      </div>
+    </div>
+  );
 }
-function Card(p:{title:string;desc:string;children:React.ReactNode}){return <div className="space-y-5"><div><h3 className="text-lg font-semibold">{p.title}</h3><p className="text-sm text-muted-foreground">{p.desc}</p></div>{p.children}</div>}
-function field(label:string,child:React.ReactNode){return <label className="space-y-1.5"><span className="text-xs font-medium text-muted-foreground">{label}</span>{child}</label>}
-function Select(p:{value:string;onChange:(v:string)=>void;options:string[]}){return <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={p.value} onChange={e=>p.onChange(e.target.value)}>{p.options.map(x=><option key={x}>{x}</option>)}</select>}
-function NetworkForm(p:{data:Form;update:(k:string,v:string)=>void;save:()=>void}){return <Card title="Network" desc="แก้ไข IPv4, Gateway และ DNS ของ NVR"><div className="grid gap-4 md:grid-cols-2">{field("Addressing Type",<Select value={p.data.addressingType||"static"} onChange={v=>p.update("addressingType",v)} options={["static","dynamic"]}/>)}{field("MAC Address",<Input disabled value={p.data.mac||""}/>)}{field("IP Address",<Input disabled={p.data.addressingType==="dynamic"} value={p.data.ipAddress||""} onChange={e=>p.update("ipAddress",e.target.value)}/>)}{field("Subnet Mask",<Input disabled={p.data.addressingType==="dynamic"} value={p.data.subnetMask||""} onChange={e=>p.update("subnetMask",e.target.value)}/>)}{field("Gateway",<Input disabled={p.data.addressingType==="dynamic"} value={p.data.gateway||""} onChange={e=>p.update("gateway",e.target.value)}/>)}{field("Primary DNS",<Input value={p.data.primaryDns||""} onChange={e=>p.update("primaryDns",e.target.value)}/>)}{field("Secondary DNS",<Input value={p.data.secondaryDns||""} onChange={e=>p.update("secondaryDns",e.target.value)}/>)}</div><Warn text="การเปลี่ยน IP อาจทำให้ NVR หลุดจากระบบทันที"/><Actions save={p.save}/></Card>}
-function TimeForm(p:{data:Form;update:(k:string,v:string)=>void;save:()=>void}){return <Card title="Date & Time" desc="ตั้ง Time Zone และ NTP"><div className="grid gap-4 md:grid-cols-2">{field("Time Mode",<Select value={p.data.timeMode||"NTP"} onChange={v=>p.update("timeMode",v)} options={["NTP","manual"]}/>)}{field("Time Zone",<Input value={p.data.timeZone||""} onChange={e=>p.update("timeZone",e.target.value)}/>)}{field("NTP Server",<Input disabled={p.data.timeMode!=="NTP"} value={p.data.ntpServer||""} onChange={e=>p.update("ntpServer",e.target.value)}/>)}{field("Local Time",<Input type="datetime-local" disabled={p.data.timeMode==="NTP"} value={(p.data.localTime||"").slice(0,16)} onChange={e=>p.update("localTime",e.target.value)}/>)}</div><Actions save={p.save}/></Card>}
-function UsersForm(p:{rows:Form[];setRows:any;save:(u:Form)=>void;del:(u:Form)=>void}){const [edit,setEdit]=useState<Form|null>(null);return <Card title="Users" desc="เพิ่ม แก้ไข และลบ User บน NVR จริง"><div className="flex justify-end"><Button onClick={()=>setEdit({id:"new",userName:"",userLevel:"Viewer",password:""})}><Plus className="mr-2 h-4 w-4"/>Add User</Button></div><Table headers={["ID","Username","Level","Action"]}>{p.rows.map(u=><tr key={u.id}><td>{u.id}</td><td>{u.userName}</td><td>{u.userLevel}</td><td className="text-right space-x-2"><Button size="sm" variant="outline" onClick={()=>setEdit({...u,password:""})}>Edit</Button><Button size="sm" variant="destructive" disabled={u.userName?.toLowerCase()==="admin"} onClick={()=>confirm(\`ลบ \${u.userName} จาก NVR จริง?\`)&&void p.del(u)}><Trash2 className="h-4 w-4"/></Button></td></tr>)}</Table>{edit&&<Editor title={edit.id==="new"?"Add User":\`Edit \${edit.userName}\`}>{field("Username",<Input disabled={edit.id!=="new"} value={edit.userName||""} onChange={e=>setEdit({...edit,userName:e.target.value})}/>)}{field("Password",<Input type="password" value={edit.password||""} onChange={e=>setEdit({...edit,password:e.target.value})}/>)}{field("User Level",<Select value={edit.userLevel||"Viewer"} onChange={v=>setEdit({...edit,userLevel:v})} options={["Administrator","Operator","Viewer"]}/>)}<Actions save={()=>{p.save(edit);setEdit(null)}} cancel={()=>setEdit(null)}/></Editor>}</Card>}
-function StorageForm(p:{rows:Form[]}){return <Card title="Storage / HDD" desc="ข้อมูล HDD จาก NVR"><Table headers={["HDD","Status","Capacity","Free"]}>{p.rows.map(x=><tr key={x.id}><td>{x.name}</td><td>{x.status}</td><td>{x.capacity}</td><td>{x.freeSpace}</td></tr>)}</Table></Card>}
-function CamerasForm(p:{rows:Form[];setRows:any;save:(c:Form)=>void}){const [edit,setEdit]=useState<Form|null>(null);return <Card title="Camera Channels" desc="แก้ชื่อ IP Port และ Username ของ Camera Channel"><Table headers={["CH","Name","IP","Port","Username","Action"]}>{p.rows.map(c=><tr key={c.id}><td>{c.id}</td><td>{c.name}</td><td className="font-mono text-xs">{c.ipAddress||"-"}</td><td>{c.managePortNo}</td><td>{c.userName}</td><td className="text-right"><Button size="sm" variant="outline" onClick={()=>setEdit({...c,password:""})}>Edit</Button></td></tr>)}</Table>{edit&&<Editor title={\`Edit Camera Channel \${edit.id}\`}>{field("Name",<Input value={edit.name||""} onChange={e=>setEdit({...edit,name:e.target.value})}/>)}{field("IP Address",<Input value={edit.ipAddress||""} onChange={e=>setEdit({...edit,ipAddress:e.target.value})}/>)}{field("Port",<Input value={edit.managePortNo||"8000"} onChange={e=>setEdit({...edit,managePortNo:e.target.value})}/>)}{field("Username",<Input value={edit.userName||""} onChange={e=>setEdit({...edit,userName:e.target.value})}/>)}{field("Password",<Input type="password" value={edit.password||""} onChange={e=>setEdit({...edit,password:e.target.value})}/>)}<Actions save={()=>{p.save(edit);setEdit(null)}} cancel={()=>setEdit(null)}/></Editor>}</Card>}
-function Table(p:{headers:string[];children:React.ReactNode}){return <div className="overflow-x-auto rounded-xl border"><table className="w-full text-sm"><thead className="bg-muted/40 text-left text-xs text-muted-foreground"><tr>{p.headers.map(h=><th key={h} className="px-3 py-3">{h}</th>)}</tr></thead><tbody className="divide-y">{p.children}</tbody></table></div>}
-function Editor(p:{title:string;children:React.ReactNode}){return <div className="rounded-xl border bg-muted/20 p-4 space-y-4"><b>{p.title}</b>{p.children}</div>}
-function Actions(p:{save:()=>void;cancel?:()=>void}){return <div className="flex justify-end gap-2"><Button variant="outline" onClick={p.cancel||(()=>{})}>Cancel</Button><Button onClick={p.save}><Save className="mr-2 h-4 w-4"/>Save Changes</Button></div>}
-function Warn({text}:{text:string}){return <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{text}</div>}
-function esc(v:string){return v.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}
-const NS="http://www.hikvision.com/ver20/XMLSchema";
-function networkXml(x:Form){return \`<?xml version="1.0" encoding="UTF-8"?><NetworkInterface version="2.0" xmlns="\${NS}"><id>\${esc(x.id||"1")}</id><IPAddress><ipVersion>v4</ipVersion><addressingType>\${esc(x.addressingType||"static")}</addressingType><ipAddress>\${esc(x.ipAddress||"")}</ipAddress><subnetMask>\${esc(x.subnetMask||"")}</subnetMask><DefaultGateway><ipAddress>\${esc(x.gateway||"")}</ipAddress></DefaultGateway><PrimaryDNS><ipAddress>\${esc(x.primaryDns||"")}</ipAddress></PrimaryDNS><SecondaryDNS><ipAddress>\${esc(x.secondaryDns||"")}</ipAddress></SecondaryDNS></IPAddress></NetworkInterface>\`}
-function timeXml(x:Form){return \`<?xml version="1.0" encoding="UTF-8"?><Time version="2.0" xmlns="\${NS}"><timeMode>\${esc(x.timeMode||"NTP")}</timeMode><localTime>\${esc(x.localTime||"")}</localTime><timeZone>\${esc(x.timeZone||"ICT-7")}</timeZone><NTPServer><address>\${esc(x.ntpServer||"pool.ntp.org")}</address></NTPServer></Time>\`}
-function userXml(x:Form){return \`<?xml version="1.0" encoding="UTF-8"?><User version="2.0" xmlns="\${NS}"><id>\${esc(x.id==="new"?"":x.id||"")}</id><userName>\${esc(x.userName||"")}</userName>\${x.password?\`<password>\${esc(x.password)}</password>\`:""}<userLevel>\${esc(x.userLevel||"Viewer")}</userLevel></User>\`}
-function cameraXml(x:Form){return \`<?xml version="1.0" encoding="UTF-8"?><InputProxyChannel version="2.0" xmlns="\${NS}"><id>\${esc(x.id||"")}</id><name>\${esc(x.name||"")}</name><sourceInputPortDescriptor><addressingFormatType>ipaddress</addressingFormatType><ipAddress>\${esc(x.ipAddress||"")}</ipAddress><managePortNo>\${esc(x.managePortNo||"8000")}</managePortNo><userName>\${esc(x.userName||"")}</userName>\${x.password?\`<password>\${esc(x.password)}</password>\`:""}</sourceInputPortDescriptor></InputProxyChannel>\`}
+
+function Card({
+  title,
+  desc,
+  children,
+}: {
+  title: string;
+  desc: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-lg font-semibold">{title}</h3>
+        <p className="text-sm text-muted-foreground">{desc}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function field(label: string, child: React.ReactNode) {
+  return (
+    <label className="space-y-1.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {child}
+    </label>
+  );
+}
+
+function Select({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <select
+      className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {options.map((option) => (
+        <option key={option}>{option}</option>
+      ))}
+    </select>
+  );
+}
+
+function NetworkForm({
+  data,
+  update,
+  busy,
+  save,
+}: {
+  data: Form;
+  update: (key: string, value: string) => void;
+  busy: boolean;
+  save: () => void;
+}) {
+  return (
+    <Card title="Network" desc="แก้ไข IPv4, Gateway และ DNS ของ NVR">
+      <div className="grid gap-4 md:grid-cols-2">
+        {field(
+          "Addressing Type",
+          <Select
+            value={data.addressingType || "static"}
+            onChange={(value) => update("addressingType", value)}
+            options={["static", "dynamic"]}
+          />,
+        )}
+        {field("MAC Address", <Input disabled value={data.mac || ""} />)}
+        {field(
+          "IP Address",
+          <Input
+            disabled={data.addressingType === "dynamic"}
+            value={data.ipAddress || ""}
+            onChange={(e) => update("ipAddress", e.target.value)}
+          />,
+        )}
+        {field(
+          "Subnet Mask",
+          <Input
+            disabled={data.addressingType === "dynamic"}
+            value={data.subnetMask || ""}
+            onChange={(e) => update("subnetMask", e.target.value)}
+          />,
+        )}
+        {field(
+          "Gateway",
+          <Input
+            disabled={data.addressingType === "dynamic"}
+            value={data.gateway || ""}
+            onChange={(e) => update("gateway", e.target.value)}
+          />,
+        )}
+        {field(
+          "Primary DNS",
+          <Input
+            value={data.primaryDns || ""}
+            onChange={(e) => update("primaryDns", e.target.value)}
+          />,
+        )}
+        {field(
+          "Secondary DNS",
+          <Input
+            value={data.secondaryDns || ""}
+            onChange={(e) => update("secondaryDns", e.target.value)}
+          />,
+        )}
+      </div>
+      <Warn text="การเปลี่ยน IP อาจทำให้ NVR หลุดจากระบบทันที" />
+      <Actions busy={busy} save={save} />
+    </Card>
+  );
+}
+
+function TimeForm({
+  data,
+  update,
+  busy,
+  save,
+}: {
+  data: Form;
+  update: (key: string, value: string) => void;
+  busy: boolean;
+  save: () => void;
+}) {
+  return (
+    <Card title="Date & Time" desc="ตั้ง Time Zone และ NTP">
+      <div className="grid gap-4 md:grid-cols-2">
+        {field(
+          "Time Mode",
+          <Select
+            value={data.timeMode || "NTP"}
+            onChange={(value) => update("timeMode", value)}
+            options={["NTP", "manual"]}
+          />,
+        )}
+        {field(
+          "Time Zone",
+          <Input
+            value={data.timeZone || ""}
+            onChange={(e) => update("timeZone", e.target.value)}
+          />,
+        )}
+        {field(
+          "NTP Server",
+          <Input
+            disabled={data.timeMode !== "NTP"}
+            value={data.ntpServer || ""}
+            onChange={(e) => update("ntpServer", e.target.value)}
+          />,
+        )}
+        {field(
+          "Local Time",
+          <Input
+            type="datetime-local"
+            disabled={data.timeMode === "NTP"}
+            value={(data.localTime || "").slice(0, 16)}
+            onChange={(e) => update("localTime", e.target.value)}
+          />,
+        )}
+      </div>
+      <Actions busy={busy} save={save} />
+    </Card>
+  );
+}
+
+function UsersForm({
+  rows,
+  busy,
+  save,
+  del,
+}: {
+  rows: Form[];
+  busy: boolean;
+  save: (user: Form) => void;
+  del: (user: Form) => void;
+}) {
+  const [edit, setEdit] = useState<Form | null>(null);
+
+  return (
+    <Card title="Users" desc="เพิ่ม แก้ไข และลบ User บน NVR จริง">
+      <div className="flex justify-end">
+        <Button
+          onClick={() =>
+            setEdit({
+              id: "new",
+              userName: "",
+              userLevel: "Viewer",
+              password: "",
+            })
+          }
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add User
+        </Button>
+      </div>
+
+      <Table headers={["ID", "Username", "Level", "Action"]}>
+        {rows.map((user) => (
+          <tr key={user.id}>
+            <td>{user.id}</td>
+            <td>{user.userName}</td>
+            <td>{user.userLevel}</td>
+            <td className="space-x-2 text-right">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setEdit({ ...user, password: "" })}
+              >
+                Edit
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={busy || user.userName?.toLowerCase() === "admin"}
+                onClick={() => {
+                  if (confirm("ลบ " + user.userName + " จาก NVR จริง?")) {
+                    del(user);
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </td>
+          </tr>
+        ))}
+      </Table>
+
+      {edit && (
+        <Editor title={edit.id === "new" ? "Add User" : "Edit " + edit.userName}>
+          {field(
+            "Username",
+            <Input
+              disabled={edit.id !== "new"}
+              value={edit.userName || ""}
+              onChange={(e) =>
+                setEdit({ ...edit, userName: e.target.value })
+              }
+            />,
+          )}
+          {field(
+            "Password",
+            <Input
+              type="password"
+              value={edit.password || ""}
+              onChange={(e) => setEdit({ ...edit, password: e.target.value })}
+            />,
+          )}
+          {field(
+            "User Level",
+            <Select
+              value={edit.userLevel || "Viewer"}
+              onChange={(value) => setEdit({ ...edit, userLevel: value })}
+              options={["Administrator", "Operator", "Viewer"]}
+            />,
+          )}
+          <Actions
+            busy={busy}
+            save={() => {
+              save(edit);
+              setEdit(null);
+            }}
+            cancel={() => setEdit(null)}
+          />
+        </Editor>
+      )}
+    </Card>
+  );
+}
+
+function StorageForm({ rows }: { rows: Form[] }) {
+  return (
+    <Card title="Storage / HDD" desc="ข้อมูล HDD จาก NVR">
+      <Table headers={["HDD", "Status", "Capacity", "Free"]}>
+        {rows.map((item) => (
+          <tr key={item.id}>
+            <td>{item.name}</td>
+            <td>{item.status}</td>
+            <td>{item.capacity}</td>
+            <td>{item.freeSpace}</td>
+          </tr>
+        ))}
+      </Table>
+    </Card>
+  );
+}
+
+function CamerasForm({
+  rows,
+  busy,
+  save,
+}: {
+  rows: Form[];
+  busy: boolean;
+  save: (camera: Form) => void;
+}) {
+  const [edit, setEdit] = useState<Form | null>(null);
+
+  return (
+    <Card
+      title="Camera Channels"
+      desc="แก้ชื่อ IP Port และ Username ของ Camera Channel"
+    >
+      <Table headers={["CH", "Name", "IP", "Port", "Username", "Action"]}>
+        {rows.map((camera) => (
+          <tr key={camera.id}>
+            <td>{camera.id}</td>
+            <td>{camera.name}</td>
+            <td className="font-mono text-xs">{camera.ipAddress || "-"}</td>
+            <td>{camera.managePortNo}</td>
+            <td>{camera.userName}</td>
+            <td className="text-right">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setEdit({ ...camera, password: "" })}
+              >
+                Edit
+              </Button>
+            </td>
+          </tr>
+        ))}
+      </Table>
+
+      {edit && (
+        <Editor title={"Edit Camera Channel " + edit.id}>
+          {field(
+            "Name",
+            <Input
+              value={edit.name || ""}
+              onChange={(e) => setEdit({ ...edit, name: e.target.value })}
+            />,
+          )}
+          {field(
+            "IP Address",
+            <Input
+              value={edit.ipAddress || ""}
+              onChange={(e) =>
+                setEdit({ ...edit, ipAddress: e.target.value })
+              }
+            />,
+          )}
+          {field(
+            "Port",
+            <Input
+              value={edit.managePortNo || "8000"}
+              onChange={(e) =>
+                setEdit({ ...edit, managePortNo: e.target.value })
+              }
+            />,
+          )}
+          {field(
+            "Username",
+            <Input
+              value={edit.userName || ""}
+              onChange={(e) => setEdit({ ...edit, userName: e.target.value })}
+            />,
+          )}
+          {field(
+            "Password",
+            <Input
+              type="password"
+              value={edit.password || ""}
+              onChange={(e) => setEdit({ ...edit, password: e.target.value })}
+            />,
+          )}
+          <Actions
+            busy={busy}
+            save={() => {
+              save(edit);
+              setEdit(null);
+            }}
+            cancel={() => setEdit(null)}
+          />
+        </Editor>
+      )}
+    </Card>
+  );
+}
+
+function Table({
+  headers,
+  children,
+}: {
+  headers: string[];
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-xl border">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
+          <tr>
+            {headers.map((header) => (
+              <th key={header} className="px-3 py-3">
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y">{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function Editor({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
+      <b>{title}</b>
+      {children}
+    </div>
+  );
+}
+
+function Actions({
+  busy,
+  save,
+  cancel,
+}: {
+  busy?: boolean;
+  save: () => void;
+  cancel?: () => void;
+}) {
+  return (
+    <div className="flex justify-end gap-2">
+      {cancel && (
+        <Button variant="outline" disabled={busy} onClick={cancel}>
+          Cancel
+        </Button>
+      )}
+      <Button disabled={busy} onClick={save}>
+        <Save className="mr-2 h-4 w-4" />
+        {busy ? "Saving..." : "Save Changes"}
+      </Button>
+    </div>
+  );
+}
+
+function Warn({ text: message }: { text: string }) {
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+      {message}
+    </div>
+  );
+}
+
+function esc(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function networkXml(x: Form) {
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<NetworkInterface version="2.0" xmlns="' +
+    XML_NS +
+    '">' +
+    "<id>" +
+    esc(x.id || "1") +
+    "</id>" +
+    "<IPAddress><ipVersion>v4</ipVersion>" +
+    "<addressingType>" +
+    esc(x.addressingType || "static") +
+    "</addressingType>" +
+    "<ipAddress>" +
+    esc(x.ipAddress || "") +
+    "</ipAddress>" +
+    "<subnetMask>" +
+    esc(x.subnetMask || "") +
+    "</subnetMask>" +
+    "<DefaultGateway><ipAddress>" +
+    esc(x.gateway || "") +
+    "</ipAddress></DefaultGateway>" +
+    "<PrimaryDNS><ipAddress>" +
+    esc(x.primaryDns || "") +
+    "</ipAddress></PrimaryDNS>" +
+    "<SecondaryDNS><ipAddress>" +
+    esc(x.secondaryDns || "") +
+    "</ipAddress></SecondaryDNS></IPAddress>" +
+    "</NetworkInterface>"
+  );
+}
+
+function timeXml(x: Form) {
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<Time version="2.0" xmlns="' +
+    XML_NS +
+    '">' +
+    "<timeMode>" +
+    esc(x.timeMode || "NTP") +
+    "</timeMode>" +
+    "<localTime>" +
+    esc(x.localTime || "") +
+    "</localTime>" +
+    "<timeZone>" +
+    esc(x.timeZone || "ICT-7") +
+    "</timeZone>" +
+    "<NTPServer><address>" +
+    esc(x.ntpServer || "pool.ntp.org") +
+    "</address></NTPServer></Time>"
+  );
+}
+
+function userXml(x: Form) {
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<User version="2.0" xmlns="' +
+    XML_NS +
+    '">' +
+    "<id>" +
+    esc(x.id === "new" ? "" : x.id || "") +
+    "</id>" +
+    "<userName>" +
+    esc(x.userName || "") +
+    "</userName>" +
+    (x.password ? "<password>" + esc(x.password) + "</password>" : "") +
+    "<userLevel>" +
+    esc(x.userLevel || "Viewer") +
+    "</userLevel></User>"
+  );
+}
+
+function cameraXml(x: Form) {
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<InputProxyChannel version="2.0" xmlns="' +
+    XML_NS +
+    '">' +
+    "<id>" +
+    esc(x.id || "") +
+    "</id>" +
+    "<name>" +
+    esc(x.name || "") +
+    "</name>" +
+    "<sourceInputPortDescriptor>" +
+    "<addressingFormatType>ipaddress</addressingFormatType>" +
+    "<ipAddress>" +
+    esc(x.ipAddress || "") +
+    "</ipAddress>" +
+    "<managePortNo>" +
+    esc(x.managePortNo || "8000") +
+    "</managePortNo>" +
+    "<userName>" +
+    esc(x.userName || "") +
+    "</userName>" +
+    (x.password ? "<password>" + esc(x.password) + "</password>" : "") +
+    "</sourceInputPortDescriptor></InputProxyChannel>"
+  );
+}
