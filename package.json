@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "worker": "node scripts/hikvision-worker.mjs",
+    "worker": "node --env-file=.env scripts/hikvision-worker.mjs",
     "windows:refresh": "node scripts/build-windows-releases.mjs"
   },
   "dependencies": {
