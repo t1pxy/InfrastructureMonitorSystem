@@ -47,7 +47,6 @@ function ensureStoreLoaded(): CameraStateStore {
 
 function saveStore(store: CameraStateStore) {
   const directory = path.dirname(STATE_FILE);
-  const tempFile = `${STATE_FILE}.${process.pid}.${Date.now()}.tmp`;
   const payload = JSON.stringify(store, null, 2);
 
   try {
@@ -57,37 +56,36 @@ function saveStore(store: CameraStateStore) {
       });
     }
 
-    // Write to a temporary file first, then replace the state file.
-    // This avoids partial JSON files and is safer when multiple monitor
-    // requests/processes touch the state file on Windows.
-    fs.writeFileSync(tempFile, payload, {
-      encoding: "utf8",
-      flag: "w",
-    });
+    // Windows can keep the existing JSON file open (for example by the
+    // Next.js watcher/AV scanner), which makes rename-over-existing fail
+    // with EPERM. Write directly with a short retry instead.
+    let lastError: unknown = null;
 
-    fs.renameSync(tempFile, STATE_FILE);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        fs.writeFileSync(STATE_FILE, payload, {
+          encoding: "utf8",
+          flag: "w",
+        });
+
+        return;
+      } catch (error) {
+        lastError = error;
+
+        if (attempt < 2) {
+          const delayMs = 50 * (attempt + 1);
+          const end = Date.now() + delayMs;
+
+          while (Date.now() < end) {
+            // Small synchronous backoff for transient Windows file locks.
+          }
+        }
+      }
+    }
+
+    throw lastError;
   } catch (error) {
     console.error("[Hikvision Camera State] Failed to save state:", error);
-
-    // Best-effort cleanup of the temporary file.
-    try {
-      if (fs.existsSync(tempFile)) {
-        fs.unlinkSync(tempFile);
-      }
-    } catch {
-      // Ignore cleanup errors.
-    }
-
-    // If replacing the file failed because Windows temporarily held it,
-    // retry the direct write once rather than losing the in-memory state.
-    try {
-      fs.writeFileSync(STATE_FILE, payload, "utf8");
-    } catch (retryError) {
-      console.error(
-        "[Hikvision Camera State] Retry failed:",
-        retryError,
-      );
-    }
   }
 }
 
