@@ -156,7 +156,7 @@ export default function CctvPage() {
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
 
   const [now, setNow] = useState(() => Date.now());
-  const [nvrOptions, setNvrOptions] = useState<{ id: string; name: string }[]>([]);
+  const [configuredNvrOptions, setConfiguredNvrOptions] = useState<{ id: string; name: string }[]>([]);
   const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
   const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
 
@@ -198,7 +198,7 @@ export default function CctvPage() {
       const configResponse = await fetch("/api/hikvision/config", { cache: "no-store" });
       const configJson = await configResponse.json();
       if (configResponse.ok && configJson.success) {
-        setNvrOptions((configJson.data.nvrs ?? []).map((nvr: { id: string; name: string }) => ({ id: nvr.id, name: nvr.name })));
+        setConfiguredNvrOptions((configJson.data.nvrs ?? []).map((nvr: { id: string; name: string }) => ({ id: nvr.id, name: nvr.name })));
       }
 
       setLastRefresh(new Date().toISOString());
@@ -692,7 +692,7 @@ export default function CctvPage() {
         open={cameraDialogOpen}
         nvrId={editingCamera?.nvrId}
         initial={editingCamera}
-        nvrOptions={nvrOptions}
+        nvrOptions={configuredNvrOptions}
         onClose={() => setCameraDialogOpen(false)}
         onSaved={() => void load(false)}
         onDeleted={() => void load(false)}
