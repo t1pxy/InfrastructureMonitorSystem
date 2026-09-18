@@ -1,6 +1,6 @@
 import { hikvisionRequest } from "@/lib/hikvision/client";
 import type { Nvr, NvrCamera, NvrConfig, NvrStorage } from "@/types/nvr";
-import { updateCameraState } from "@/lib/hikvision/camera-state";
+import { updateCameraStates } from "@/lib/hikvision/camera-state";
 
 export function encodeNvrRouteId(id: string) {
   return Buffer.from(id, "utf8").toString("base64url");
@@ -162,7 +162,7 @@ async function getCameraStatus(nvr: NvrConfig, cameras: NvrCamera[]) {
 
     const now = new Date().toISOString();
 
-    return cameras.map((camera) => {
+    const updates = cameras.map((camera) => {
       const block = blocks.find(
         (item) => numberValue(tag(item, "id")) === camera.channel,
       );
@@ -177,46 +177,46 @@ async function getCameraStatus(nvr: NvrConfig, cameras: NvrCamera[]) {
         statusValue === "1" ||
         normalizedStatus === "online";
 
-      let nextStatus: NvrCamera["status"];
-
-      if (!block) {
-        nextStatus = "UNKNOWN";
-      } else {
-        nextStatus = online ? "ONLINE" : "OFFLINE";
-      }
-
-      const persisted = updateCameraState(
-        nvr.id,
-        camera.channel,
-        nextStatus,
-        now,
-      );
+      const nextStatus: NvrCamera["status"] = !block
+        ? "UNKNOWN"
+        : online
+          ? "ONLINE"
+          : "OFFLINE";
 
       return {
-        ...camera,
+        nvrId: nvr.id,
+        channel: camera.channel,
         status: nextStatus,
-        lastChecked: now,
-        offlineSince: persisted.offlineSince,
+        now,
       };
     });
+
+    const persistedStates = updateCameraStates(updates);
+
+    return cameras.map((camera, index) => ({
+      ...camera,
+      status: updates[index].status,
+      lastChecked: now,
+      offlineSince: persistedStates[index]?.offlineSince ?? null,
+    }));
   } catch {
     const now = new Date().toISOString();
 
-    return cameras.map((camera) => {
-      const persisted = updateCameraState(
-        nvr.id,
-        camera.channel,
-        "UNKNOWN",
-        now,
-      );
+    const updates = cameras.map((camera) => ({
+      nvrId: nvr.id,
+      channel: camera.channel,
+      status: "UNKNOWN" as const,
+      now,
+    }));
 
-      return {
-        ...camera,
-        status: "UNKNOWN" as const,
-        lastChecked: now,
-        offlineSince: persisted.offlineSince,
-      };
-    });
+    const persistedStates = updateCameraStates(updates);
+
+    return cameras.map((camera, index) => ({
+      ...camera,
+      status: "UNKNOWN" as const,
+      lastChecked: now,
+      offlineSince: persistedStates[index]?.offlineSince ?? null,
+    }));
   }
 }
 
