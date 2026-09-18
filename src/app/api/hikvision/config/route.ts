@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  deleteCameraConfig,
   deleteNvrConfig,
   getHikvisionConfigs,
   upsertCameraConfig,
@@ -71,6 +72,13 @@ export async function PUT(request: Request) {
         );
       }
 
+      if (!getHikvisionConfigs().nvrs.some((nvr) => nvr.id === nvrId)) {
+        return NextResponse.json(
+          { success: false, error: "NVR not found." },
+          { status: 404 },
+        );
+      }
+
       const camera = upsertCameraConfig({
         nvrId,
         channel,
@@ -99,13 +107,22 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const body = (await request.json()) as { type?: string; id?: string };
-    if (body.type !== "nvr" || !body.id) {
-      return NextResponse.json({ success: false, error: "NVR ID is required." }, { status: 400 });
+    const body = (await request.json()) as { type?: string; id?: string; nvrId?: string; channel?: number };
+
+    if (body.type === "nvr" && body.id) {
+      deleteNvrConfig(body.id);
+      return NextResponse.json({ success: true });
     }
 
-    deleteNvrConfig(body.id);
-    return NextResponse.json({ success: true });
+    if (body.type === "camera" && body.nvrId && Number.isInteger(body.channel)) {
+      deleteCameraConfig(body.nvrId, Number(body.channel));
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json(
+      { success: false, error: "Valid NVR ID or camera NVR/channel is required." },
+      { status: 400 },
+    );
   } catch (error) {
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Failed to delete configuration." },
