@@ -198,8 +198,30 @@ export default function Page() {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const addCamera = async (camera: Form) => {
+    if (!selected || !camera.channel) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (!camera.ipAddress || !camera.userName || !camera.password) {
+        throw new Error("กรุณากรอก IP Address, Username และ Password ให้ครบ");
+      }
+
+      const xml = newCameraXml(camera);
+      await call("POST", "/ISAPI/ContentMgmt/InputProxy/channels", xml);
+
+      setMessage("เพิ่ม Camera สำเร็จ");
+      await read();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "เพิ่ม Camera ไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveCamera = async (camera: Form) => {
     if (!selected || !camera.id) return;
+    if (camera.id === "new") return addCamera(camera);
     setBusy(true);
     setError("");
     try {
@@ -487,7 +509,8 @@ export default function Page() {
                     busy={busy}
                     save={() =>
                       void saveRequest(
-                        "/ISAPI/System/Network/interfaces",
+                        "/ISAPI/System/Network/interfaces/" +
+                          encodeURIComponent(form.id || "1"),
                         networkXml(form),
                         "บันทึก Network สำเร็จ",
                       )
@@ -627,14 +650,14 @@ function NetworkForm({
           <Select
             value={data.addressingType || "static"}
             onChange={(value) => update("addressingType", value)}
-            options={["static", "dynamic"]}
+            options={["static", "dhcp"]}
           />,
         )}
         {field("MAC Address", <Input disabled value={data.mac || ""} />)}
         {field(
           "IP Address",
           <Input
-            disabled={data.addressingType === "dynamic"}
+            disabled={data.addressingType === "dhcp"}
             value={data.ipAddress || ""}
             onChange={(e) => update("ipAddress", e.target.value)}
           />,
@@ -642,7 +665,7 @@ function NetworkForm({
         {field(
           "Subnet Mask",
           <Input
-            disabled={data.addressingType === "dynamic"}
+            disabled={data.addressingType === "dhcp"}
             value={data.subnetMask || ""}
             onChange={(e) => update("subnetMask", e.target.value)}
           />,
@@ -650,7 +673,7 @@ function NetworkForm({
         {field(
           "Gateway",
           <Input
-            disabled={data.addressingType === "dynamic"}
+            disabled={data.addressingType === "dhcp"}
             value={data.gateway || ""}
             onChange={(e) => update("gateway", e.target.value)}
           />,
@@ -861,11 +884,39 @@ function CamerasForm({
 }) {
   const [edit, setEdit] = useState<Form | null>(null);
 
+  const nextChannel = () => {
+    const used = rows
+      .map((row) => Number(row.id))
+      .filter((value) => Number.isInteger(value) && value > 0);
+    return String((used.length ? Math.max(...used) : 0) + 1);
+  };
+
   return (
     <Card
       title="Camera Channels"
-      desc="แก้ชื่อ IP Port และ Username ของ Camera Channel"
+      desc="เพิ่ม แก้ชื่อ IP Port และ Username ของ Camera Channel"
     >
+      <div className="flex justify-end">
+        <Button
+          disabled={busy}
+          onClick={() =>
+            setEdit({
+              id: "new",
+              channel: nextChannel(),
+              name: "",
+              ipAddress: "",
+              managePortNo: "8000",
+              userName: "",
+              password: "",
+              protocolType: "HIKVISION",
+            })
+          }
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add Camera
+        </Button>
+      </div>
+
       <Table headers={["CH", "Name", "IP", "Port", "Username", "Action"]}>
         {rows.map((camera) => (
           <tr key={camera.id}>
@@ -889,7 +940,38 @@ function CamerasForm({
       </Table>
 
       {edit && (
-        <Editor title={"Edit Camera Channel " + edit.id}>
+        <Editor
+          title={
+            edit.id === "new"
+              ? "Add Camera Channel"
+              : "Edit Camera Channel " + edit.id
+          }
+        >
+          {edit.id === "new" && (
+            <div className="grid gap-4 md:grid-cols-2">
+              {field(
+                "Channel No.",
+                <Input
+                  type="number"
+                  min={1}
+                  value={edit.channel || ""}
+                  onChange={(e) =>
+                    setEdit({ ...edit, channel: e.target.value })
+                  }
+                />,
+              )}
+              {field(
+                "Protocol",
+                <Select
+                  value={edit.protocolType || "HIKVISION"}
+                  onChange={(value) =>
+                    setEdit({ ...edit, protocolType: value })
+                  }
+                  options={["HIKVISION", "ONVIF"]}
+                />,
+              )}
+            </div>
+          )}
           {field(
             "Name",
             <Input
@@ -926,6 +1008,9 @@ function CamerasForm({
             "Password",
             <Input
               type="password"
+              placeholder={
+                edit.id === "new" ? "" : "ว่าง = ใช้รหัสเดิม"
+              }
               value={edit.password || ""}
               onChange={(e) => setEdit({ ...edit, password: e.target.value })}
             />,
@@ -1090,5 +1175,39 @@ function userXml(x: Form) {
     "<userLevel>" +
     esc(x.userLevel || "Viewer") +
     "</userLevel></User>"
+  );
+}
+
+function newCameraXml(x: Form) {
+  return (
+    '<InputProxyChannel version="2.0" xmlns="' +
+    XML_NS +
+    '">' +
+    "<id>" +
+    esc(x.channel || "") +
+    "</id>" +
+    "<name>" +
+    esc(x.name || "IPCamera " + (x.channel || "")) +
+    "</name>" +
+    "<sourceInputPortDescriptor>" +
+    "<proxyProtocol><id>1</id><protocolType>" +
+    esc(x.protocolType || "HIKVISION") +
+    "</protocolType></proxyProtocol>" +
+    "<addressingFormatType>ipaddress</addressingFormatType>" +
+    "<ipAddress>" +
+    esc(x.ipAddress || "") +
+    "</ipAddress>" +
+    "<managePortNo>" +
+    esc(x.managePortNo || "8000") +
+    "</managePortNo>" +
+    "<srcInputPort>1</srcInputPort>" +
+    "<userName>" +
+    esc(x.userName || "") +
+    "</userName>" +
+    "<password>" +
+    esc(x.password || "") +
+    "</password>" +
+    "</sourceInputPortDescriptor>" +
+    "</InputProxyChannel>"
   );
 }

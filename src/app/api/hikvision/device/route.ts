@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     const nvr = getNvrConfig(nvrId);
     if (!nvr) return NextResponse.json({ success: false, error: "NVR not found." }, { status: 404 });
 
-    if (method !== "GET" && !String(body.body ?? "").trim()) {
+    if ((method === "POST" || method === "PUT") && !String(body.body ?? "").trim()) {
       return NextResponse.json({ success: false, error: "Request body is required for this method." }, { status: 400 });
     }
 

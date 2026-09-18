@@ -66,6 +66,11 @@ const menuSections: MenuSection[] = [
         href: "/cctv",
         icon: Cctv,
       },
+      {
+        title: "Manage NVR/CCTV",
+        href: "/hikvision/config",
+        icon: Settings,
+      },
     ],
   },
   {
