@@ -6,6 +6,7 @@ export interface NvrConfig {
   name: string;
   host: string;
   port?: number;
+  protocol?: "http" | "https";
   username: string;
   password: string;
   site?: string;
