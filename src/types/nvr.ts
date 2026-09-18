@@ -57,7 +57,7 @@ export interface NvrListResponse {
 
 export interface NvrDetailResponse {
   success: boolean;
-  data: Nvr | null;
+  nvr: Nvr | null;
   cameras: NvrCamera[];
   error?: string;
 }

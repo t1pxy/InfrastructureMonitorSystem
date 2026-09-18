@@ -1,5 +1,6 @@
 import { hikvisionRequest } from "@/lib/hikvision/client";
 import type { Nvr, NvrCamera, NvrConfig, NvrStorage } from "@/types/nvr";
+import { updateCameraState } from "@/lib/hikvision/camera-state";
 
 export function encodeNvrRouteId(id: string) {
   return Buffer.from(id, "utf8").toString("base64url");
@@ -14,32 +15,69 @@ export function decodeNvrRouteId(value: string) {
 }
 
 function tag(xml: string, name: string): string | null {
-  const match = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, "i"));
+  const match = xml.match(
+    new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, "i"),
+  );
+
   return match?.[1]?.replace(/<!\[CDATA\[|\]\]>/g, "").trim() || null;
 }
 
 function allBlocks(xml: string, name: string): string[] {
-  return Array.from(xml.matchAll(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, "gi"))).map((m) => m[1]);
+  return Array.from(
+    xml.matchAll(
+      new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, "gi"),
+    ),
+  ).map((match) => match[1]);
 }
 
 function numberValue(value: string | null): number | null {
   if (!value) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : null;
 }
 
-function gb(value: string | null): number | null {
-  const n = numberValue(value);
-  if (n === null) return null;
-  return n > 1024 * 1024 * 1024 ? n / 1024 / 1024 / 1024 : n;
+/**
+ * Hikvision storage values are not always returned in bytes.
+ *
+ * Common Hikvision NVR responses return capacity/freeSpace as MB.
+ * Some devices may return byte-sized values.
+ *
+ * We use a heuristic:
+ * - Very large values => bytes
+ * - Normal HDD values such as 3815447 => MB
+ */
+function storageGb(value: string | null): number | null {
+  const number = numberValue(value);
+
+  if (number === null) {
+    return null;
+  }
+
+  // Byte-sized values.
+  if (number >= 1024 * 1024 * 1024) {
+    return Math.round((number / 1024 / 1024 / 1024) * 100) / 100;
+  }
+
+  // Hikvision commonly reports storage in MB.
+  return Math.round((number / 1024) * 100) / 100;
 }
 
 function configList(): NvrConfig[] {
   const raw = process.env.HIKVISION_NVR_CONFIG;
-  if (!raw) return [];
+
+  if (!raw) {
+    return [];
+  }
+
   try {
     const parsed = JSON.parse(raw) as NvrConfig[];
-    if (!Array.isArray(parsed)) return [];
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
     return parsed.filter((item) => item.id && item.host && item.username);
   } catch {
     throw new Error("HIKVISION_NVR_CONFIG is not valid JSON.");
@@ -48,12 +86,20 @@ function configList(): NvrConfig[] {
 
 function baseUrl(nvr: NvrConfig) {
   const protocol = process.env.HIKVISION_PROTOCOL || "http";
+
   const port = nvr.port ? `:${nvr.port}` : "";
+
   return `${protocol}://${nvr.host}${port}`;
 }
 
 async function getDeviceInfo(nvr: NvrConfig) {
-  const xml = await hikvisionRequest(baseUrl(nvr), nvr.username, nvr.password, "/ISAPI/System/deviceInfo");
+  const xml = await hikvisionRequest(
+    baseUrl(nvr),
+    nvr.username,
+    nvr.password,
+    "/ISAPI/System/deviceInfo",
+  );
+
   return {
     model: tag(xml, "model"),
     serialNumber: tag(xml, "serialNumber"),
@@ -63,10 +109,18 @@ async function getDeviceInfo(nvr: NvrConfig) {
 
 async function getCameras(nvr: NvrConfig): Promise<NvrCamera[]> {
   try {
-    const xml = await hikvisionRequest(baseUrl(nvr), nvr.username, nvr.password, "/ISAPI/ContentMgmt/InputProxy/channels");
+    const xml = await hikvisionRequest(
+      baseUrl(nvr),
+      nvr.username,
+      nvr.password,
+      "/ISAPI/ContentMgmt/InputProxy/channels",
+    );
+
     const blocks = allBlocks(xml, "InputProxyChannel");
+
     return blocks.map((block, index) => {
       const channel = numberValue(tag(block, "id"));
+
       return {
         id: `${nvr.id}-${channel ?? index + 1}`,
         channel,
@@ -79,103 +133,210 @@ async function getCameras(nvr: NvrConfig): Promise<NvrCamera[]> {
       };
     });
   } catch (error) {
-    return [{
-      id: `${nvr.id}-error`,
-      channel: null,
-      name: "Unable to read camera channels",
-      ipAddress: null,
-      status: "UNKNOWN",
-      lastChecked: new Date().toISOString(),
-      offlineSince: null,
-      error: error instanceof Error ? error.message : "Unknown Hikvision error",
-    }];
+    return [
+      {
+        id: `${nvr.id}-error`,
+        channel: null,
+        name: "Unable to read camera channels",
+        ipAddress: null,
+        status: "UNKNOWN",
+        lastChecked: new Date().toISOString(),
+        offlineSince: null,
+        error:
+          error instanceof Error ? error.message : "Unknown Hikvision error",
+      },
+    ];
   }
 }
 
 async function getCameraStatus(nvr: NvrConfig, cameras: NvrCamera[]) {
   try {
-    const xml = await hikvisionRequest(baseUrl(nvr), nvr.username, nvr.password, "/ISAPI/ContentMgmt/InputProxy/channels/status");
+    const xml = await hikvisionRequest(
+      baseUrl(nvr),
+      nvr.username,
+      nvr.password,
+      "/ISAPI/ContentMgmt/InputProxy/channels/status",
+    );
+
     const blocks = allBlocks(xml, "InputProxyChannelStatus");
+
     const now = new Date().toISOString();
+
     return cameras.map((camera) => {
-      const block = blocks.find((item) => numberValue(tag(item, "id")) === camera.channel);
-      const status = tag(block ?? "", "online") ?? tag(block ?? "", "status");
-      const online = status?.toLowerCase() === "true" || status === "1" || status?.toLowerCase() === "online";
-      const nextStatus: NvrCamera["status"] = block ? (online ? "ONLINE" : "OFFLINE") : "UNKNOWN";
+      const block = blocks.find(
+        (item) => numberValue(tag(item, "id")) === camera.channel,
+      );
+
+      const statusValue =
+        tag(block ?? "", "online") ?? tag(block ?? "", "status");
+
+      const normalizedStatus = statusValue?.toLowerCase();
+
+      const online =
+        normalizedStatus === "true" ||
+        statusValue === "1" ||
+        normalizedStatus === "online";
+
+      let nextStatus: NvrCamera["status"];
+
+      if (!block) {
+        nextStatus = "UNKNOWN";
+      } else {
+        nextStatus = online ? "ONLINE" : "OFFLINE";
+      }
+
+      const persisted = updateCameraState(
+        nvr.id,
+        camera.channel,
+        nextStatus,
+        now,
+      );
+
       return {
         ...camera,
         status: nextStatus,
         lastChecked: now,
-        offlineSince: nextStatus === "OFFLINE" ? (camera.offlineSince ?? now) : null,
+        offlineSince: persisted.offlineSince,
       };
     });
   } catch {
-    return cameras.map((camera) => ({ ...camera, status: "UNKNOWN" as const, lastChecked: new Date().toISOString() }));
+    const now = new Date().toISOString();
+
+    return cameras.map((camera) => {
+      const persisted = updateCameraState(
+        nvr.id,
+        camera.channel,
+        "UNKNOWN",
+        now,
+      );
+
+      return {
+        ...camera,
+        status: "UNKNOWN" as const,
+        lastChecked: now,
+        offlineSince: persisted.offlineSince,
+      };
+    });
   }
 }
 
 async function getStorage(nvr: NvrConfig): Promise<NvrStorage[]> {
   try {
-    const xml = await hikvisionRequest(baseUrl(nvr), nvr.username, nvr.password, "/ISAPI/ContentMgmt/Storage/hdd");
+    const xml = await hikvisionRequest(
+      baseUrl(nvr),
+      nvr.username,
+      nvr.password,
+      "/ISAPI/ContentMgmt/Storage/hdd",
+    );
+
     return allBlocks(xml, "hdd").map((block, index) => ({
       id: tag(block, "id") ?? String(index + 1),
-      name: tag(block, "name") ?? `HDD ${index + 1}`,
+
+      // Hikvision XML normally uses <hddName>
+      name: tag(block, "hddName") ?? tag(block, "name") ?? `HDD ${index + 1}`,
+
       status: tag(block, "status") ?? "UNKNOWN",
-      capacityGb: gb(tag(block, "capacity")),
-      freeGb: gb(tag(block, "freeSpace")),
+
+      capacityGb: storageGb(tag(block, "capacity")),
+
+      freeGb: storageGb(tag(block, "freeSpace")),
     }));
   } catch {
     return [];
   }
 }
 
-async function readNvr(config: NvrConfig): Promise<{ nvr: Nvr; cameras: NvrCamera[] }> {
+async function readNvr(config: NvrConfig): Promise<{
+  nvr: Nvr;
+  cameras: NvrCamera[];
+}> {
   const checked = new Date().toISOString();
+
   try {
     const info = await getDeviceInfo(config);
+
     let cameras = await getCameras(config);
+
     cameras = await getCameraStatus(config, cameras);
+
     const storage = await getStorage(config);
+
     const realCameras = cameras.filter((camera) => camera.channel !== null);
+
     return {
       nvr: {
         id: config.id,
+
         routeId: encodeNvrRouteId(config.id),
+
         name: config.name,
+
         host: config.host,
+
         site: config.site ?? null,
+
         model: info.model,
+
         serialNumber: info.serialNumber,
+
         firmware: info.firmware,
+
         status: "ONLINE",
+
         lastChecked: checked,
+
         cameraCount: realCameras.length,
-        onlineCameraCount: realCameras.filter((camera) => camera.status === "ONLINE").length,
-        offlineCameraCount: realCameras.filter((camera) => camera.status === "OFFLINE").length,
+
+        onlineCameraCount: realCameras.filter(
+          (camera) => camera.status === "ONLINE",
+        ).length,
+
+        offlineCameraCount: realCameras.filter(
+          (camera) => camera.status === "OFFLINE",
+        ).length,
+
         storage,
+
         error: null,
       },
+
       cameras,
     };
   } catch (error) {
     return {
       nvr: {
         id: config.id,
+
         routeId: encodeNvrRouteId(config.id),
+
         name: config.name,
+
         host: config.host,
+
         site: config.site ?? null,
+
         model: null,
+
         serialNumber: null,
+
         firmware: null,
+
         status: "OFFLINE",
+
         lastChecked: checked,
+
         cameraCount: 0,
+
         onlineCameraCount: 0,
+
         offlineCameraCount: 0,
+
         storage: [],
-        error: error instanceof Error ? error.message : "Unable to connect to NVR",
+
+        error:
+          error instanceof Error ? error.message : "Unable to connect to NVR",
       },
+
       cameras: [],
     };
   }
@@ -183,55 +344,82 @@ async function readNvr(config: NvrConfig): Promise<{ nvr: Nvr; cameras: NvrCamer
 
 export async function getNvrList(): Promise<Nvr[]> {
   const configs = configList();
+
   const results = await Promise.all(configs.map(readNvr));
+
   return results.map((result) => result.nvr);
 }
 
 export async function getNvrDetail(id: string) {
   const configs = configList();
+
   const decodedRouteId = decodeNvrRouteId(id).trim();
+
   const decodedIds = decodeRepeatedly(id).map((value) => value.trim());
 
-  // Primary lookup: route-safe Base64URL id generated from the same config id.
   let config = configs.find((item) => encodeNvrRouteId(item.id) === id);
 
-  // Backward compatibility for old links containing encoded/raw ids.
   if (!config) {
-    config = configs.find((item) =>
-      item.id.trim() === decodedRouteId || decodedIds.includes(item.id.trim()),
+    config = configs.find(
+      (item) =>
+        item.id.trim() === decodedRouteId ||
+        decodedIds.includes(item.id.trim()),
     );
   }
 
-  // Last fallback: accept a route id that was URL-decoded by Next.js.
   if (!config) {
-    const normalized = decodeRepeatedly(decodedRouteId).map((value) => value.trim());
+    const normalized = decodeRepeatedly(decodedRouteId).map((value) =>
+      value.trim(),
+    );
+
     config = configs.find((item) => normalized.includes(item.id.trim()));
   }
 
-  if (!config) return null;
+  if (!config) {
+    return null;
+  }
+
   return readNvr(config);
 }
 
 function decodeRepeatedly(value: string) {
   const values = [value];
+
   let current = value;
+
   for (let i = 0; i < 3; i += 1) {
     try {
       const decoded = decodeURIComponent(current);
-      if (decoded === current) break;
+
+      if (decoded === current) {
+        break;
+      }
+
       values.push(decoded);
       current = decoded;
     } catch {
       break;
     }
   }
+
   return Array.from(new Set(values));
 }
 
 export async function getAllCctv() {
   const configs = configList();
+
   const results = await Promise.all(configs.map(readNvr));
-  return results.flatMap(({ nvr, cameras }) => cameras
-    .filter((camera) => camera.channel !== null)
-    .map((camera) => ({ ...camera, nvrId: nvr.id, nvrRouteId: nvr.routeId, nvrName: nvr.name, nvrHost: nvr.host, site: nvr.site })));
+
+  return results.flatMap(({ nvr, cameras }) =>
+    cameras
+      .filter((camera) => camera.channel !== null)
+      .map((camera) => ({
+        ...camera,
+        nvrId: nvr.id,
+        nvrRouteId: nvr.routeId,
+        nvrName: nvr.name,
+        nvrHost: nvr.host,
+        site: nvr.site,
+      })),
+  );
 }
