@@ -116,8 +116,13 @@ export function upsertCameraConfig(config: CameraConfig) {
 
 export function deleteCameraConfig(nvrId: string, channel: number) {
   const store = load();
-  store.cameras = store.cameras.filter(
-    (camera) => !(camera.nvrId === nvrId && camera.channel === channel),
+  const existing = store.cameras.find(
+    (camera) => camera.nvrId === nvrId && camera.channel === channel,
   );
+  if (existing) {
+    existing.enabled = false;
+  } else {
+    store.cameras.push({ nvrId, channel, enabled: false });
+  }
   save(store);
 }
