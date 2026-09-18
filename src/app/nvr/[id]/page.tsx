@@ -111,6 +111,7 @@ export default function NvrDetailPage({
 
   const [now, setNow] = useState(() => Date.now());
   const [editingCamera, setEditingCamera] = useState<NvrCamera | null>(null);
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
 
   /*
    * Realtime clock for Offline Duration.
@@ -410,6 +411,9 @@ export default function NvrDetailPage({
                         <td className="px-5 py-3 text-xs text-muted-foreground">
                           {formatThai(camera.lastChecked)}
                         </td>
+                        <td className="px-5 py-3 text-right">
+                          <Button variant="outline" size="sm" onClick={() => { setEditingCamera(camera); setCameraDialogOpen(true); }}>Edit</Button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -417,6 +421,12 @@ export default function NvrDetailPage({
               </table>
             </div>
           </div>
+
+          <div className="flex justify-end">
+            <Button onClick={() => { setEditingCamera(null); setCameraDialogOpen(true); }}>Add CCTV</Button>
+          </div>
+
+          <CameraConfigDialog open={cameraDialogOpen} nvrId={nvr.id} initial={editingCamera} onClose={() => setCameraDialogOpen(false)} onSaved={() => void load()} onDeleted={() => void load()} />
 
           <div className="rounded-xl border bg-background p-5 shadow-sm">
             <h2 className="font-semibold">Storage</h2>
