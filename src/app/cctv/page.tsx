@@ -16,6 +16,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CameraConfigDialog } from "@/components/hikvision/CameraConfigDialog";
 
 type CameraStatus = "ONLINE" | "OFFLINE" | "UNKNOWN";
 
@@ -153,6 +154,9 @@ export default function CctvPage() {
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
 
   const [now, setNow] = useState(() => Date.now());
+  const [nvrOptions, setNvrOptions] = useState<{ id: string; name: string }[]>([]);
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
+  const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
 
   /*
    * Realtime clock.
@@ -189,6 +193,11 @@ export default function CctvPage() {
       }
 
       setRows(Array.isArray(json.data) ? json.data : []);
+      const configResponse = await fetch("/api/hikvision/config", { cache: "no-store" });
+      const configJson = await configResponse.json();
+      if (configResponse.ok && configJson.success) {
+        setNvrOptions((configJson.data.nvrs ?? []).map((nvr: { id: string; name: string }) => ({ id: nvr.id, name: nvr.name })));
+      }
 
       setLastRefresh(new Date().toISOString());
     } catch (cause) {
@@ -350,6 +359,9 @@ export default function CctvPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button onClick={() => { setEditingCamera(null); setCameraDialogOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" />Add CCTV
+          </Button>
           <Link
             href="/nvr"
             className="inline-flex h-9 items-center justify-center rounded-lg border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"
@@ -653,13 +665,18 @@ export default function CctvPage() {
 
                     {/* Action */}
                     <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/nvr/${camera.nvrRouteId}`}
-                        className="inline-flex h-8 items-center justify-center rounded-lg border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted"
-                      >
-                        View NVR
-                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                      </Link>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => { setEditingCamera(camera); setCameraDialogOpen(true); }}>
+                          <Settings className="mr-1.5 h-3.5 w-3.5" />Edit
+                        </Button>
+                        <Link
+                          href={`/nvr/${camera.nvrRouteId}`}
+                          className="inline-flex h-8 items-center justify-center rounded-lg border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                        >
+                          View NVR
+                          <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -668,6 +685,16 @@ export default function CctvPage() {
           </table>
         </div>
       </div>
+
+      <CameraConfigDialog
+        open={cameraDialogOpen}
+        nvrId={editingCamera?.nvrId}
+        initial={editingCamera}
+        nvrOptions={nvrOptions}
+        onClose={() => setCameraDialogOpen(false)}
+        onSaved={() => void load(false)}
+        onDeleted={() => void load(false)}
+      />
 
       {/* Pagination */}
       <div className="flex flex-col gap-3 rounded-xl border bg-background px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
