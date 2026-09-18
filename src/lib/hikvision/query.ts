@@ -70,7 +70,7 @@ function configList(): NvrConfig[] {
   return getHikvisionConfigs().nvrs.filter((item) => item.id && item.host && item.username);
 }
 function baseUrl(nvr: NvrConfig) {
-  const protocol = process.env.HIKVISION_PROTOCOL || "http";
+  const protocol = nvr.protocol || process.env.HIKVISION_PROTOCOL || "http";
 
   const port = nvr.port ? `:${nvr.port}` : "";
 
