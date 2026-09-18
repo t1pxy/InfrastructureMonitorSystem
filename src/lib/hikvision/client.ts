@@ -63,27 +63,30 @@ function buildDigest(
   return `Digest ${parts.join(", ")}`;
 }
 
-export async function hikvisionRequest(
+export async function hikvisionRequestRaw(
   baseUrl: string,
   username: string,
   password: string,
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
-  timeoutMs = 8000,
-): Promise<string> {
+  body?: string,
+  timeoutMs = 12000,
+): Promise<{ status: number; body: string }> {
   const url = new URL(path, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const first = await fetch(url, {
-      method: "GET",
+      method,
       signal: controller.signal,
       cache: "no-store",
     });
 
     if (first.status !== 401) {
-      if (!first.ok) throw new Error(`Hikvision HTTP ${first.status}`);
-      return await first.text();
+      const firstBody = await first.text();
+      if (!first.ok) throw new Error(`Hikvision HTTP ${first.status}: ${firstBody.slice(0, 300)}`);
+      return { status: first.status, body: firstBody };
     }
 
     const challengeHeader = first.headers.get("www-authenticate");
@@ -92,18 +95,35 @@ export async function hikvisionRequest(
     }
 
     const challenge = parseDigest(challengeHeader);
-    const auth = buildDigest(challenge, username, password, "GET", url.pathname + url.search);
+    const auth = buildDigest(challenge, username, password, method, url.pathname + url.search);
 
     const second = await fetch(url, {
-      method: "GET",
-      headers: { Authorization: auth, Accept: "application/xml, text/xml, */*" },
+      method,
+      headers: {
+        Authorization: auth,
+        Accept: "application/xml, text/xml, application/json, */*",
+        ...(body !== undefined ? { "Content-Type": "application/xml; charset=UTF-8" } : {}),
+      },
+      ...(body !== undefined ? { body } : {}),
       signal: controller.signal,
       cache: "no-store",
     });
 
-    if (!second.ok) throw new Error(`Hikvision HTTP ${second.status}`);
-    return await second.text();
+    const secondBody = await second.text();
+    if (!second.ok) throw new Error(`Hikvision HTTP ${second.status}: ${secondBody.slice(0, 500)}`);
+    return { status: second.status, body: secondBody };
   } finally {
     clearTimeout(timer);
   }
+}
+
+
+export async function hikvisionRequest(
+  baseUrl: string,
+  username: string,
+  password: string,
+  path: string,
+  timeoutMs = 8000,
+): Promise<string> {
+  return (await hikvisionRequestRaw(baseUrl, username, password, "GET", path, undefined, timeoutMs)).body;
 }
