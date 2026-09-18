@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
-import { runMonitor } from "@/lib/hikvision/monitor";
+import { runHikvisionMonitor } from "@/lib/hikvision/monitor";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
   try {
-    const result = await runMonitor();
+    const result = await runHikvisionMonitor();
 
-    return NextResponse.json({
-      success: true,
-      ...result,
-    });
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
       {
