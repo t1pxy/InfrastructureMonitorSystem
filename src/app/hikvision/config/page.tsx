@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import {
   CheckCircle2,
   Clock,
@@ -197,11 +198,74 @@ export default function Page() {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const saveCamera = async (camera: Form) => {
+    if (!selected || !camera.id) return;
+    setBusy(true);
+    setError("");
+    try {
+      // Hikvision InputProxyChannel is firmware/model sensitive.
+      // Read the exact XML from the NVR first, change only the requested
+      // fields, and PUT the same document back. This avoids sending a
+      // hand-built partial schema that the NVR may reject.
+      const currentXml = await call(
+        "GET",
+        "/ISAPI/ContentMgmt/InputProxy/channels/" + encodeURIComponent(camera.id),
+      );
+
+      const doc = new DOMParser().parseFromString(currentXml, "application/xml");
+      if (doc.querySelector("parsererror")) {
+        throw new Error("NVR returned invalid Camera Channel XML.");
+      }
+
+      const all = Array.from(doc.getElementsByTagName("*"));
+      const find = (name: string) =>
+        all.find((node) => node.localName === name) ?? null;
+
+      const setExisting = (name: string, value: string, required = false) => {
+        const node = find(name);
+        if (node) {
+          node.textContent = value;
+          return node;
+        }
+        if (required) throw new Error("NVR XML does not contain <" + name + ">.");
+        return null;
+      };
+
+      setExisting("name", camera.name || "");
+      setExisting("ipAddress", camera.ipAddress || "");
+      setExisting("managePortNo", camera.managePortNo || "8000");
+      setExisting("userName", camera.userName || "");
+
+      // Blank password means keep the password already stored on the NVR.
+      if (camera.password) {
+        setExisting("password", camera.password);
+      }
+
+      // Hikvision devices can reject an XML declaration as an extra root/tag.
+      // Serialize the existing document and explicitly remove the declaration.
+      let xml = new XMLSerializer().serializeToString(doc).trim();
+      xml = xml.replace(/^<\?xml[^>]*\?>\s*/i, "");
+
+      await call(
+        "PUT",
+        "/ISAPI/ContentMgmt/InputProxy/channels/" + encodeURIComponent(camera.id),
+        xml,
+      );
+
+      setMessage("บันทึก Camera สำเร็จ");
+      await read();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "บันทึก Camera ไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveRequest = async (
     path: string,
     body: string,
     successMessage: string,
-    method: "PUT" | "POST" = "PUT",
+    method: "PUT" | "POST" | "DELETE" = "PUT",
   ) => {
     setBusy(true);
     setError("");
@@ -481,13 +545,7 @@ export default function Page() {
                   <CamerasForm
                     rows={rows}
                     busy={busy}
-                    save={(camera) =>
-                      void saveRequest(
-                        "/ISAPI/ContentMgmt/InputProxy/channels/" + camera.id,
-                        cameraXml(camera),
-                        "บันทึก Camera สำเร็จ",
-                      )
-                    }
+                    save={(camera) => void saveCamera(camera)}
                   />
                 )}
               </div>
@@ -506,7 +564,7 @@ function Card({
 }: {
   title: string;
   desc: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="space-y-5">
@@ -519,7 +577,7 @@ function Card({
   );
 }
 
-function field(label: string, child: React.ReactNode) {
+function field(label: string, child: ReactNode) {
   return (
     <label className="space-y-1.5">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
@@ -891,7 +949,7 @@ function Table({
   children,
 }: {
   headers: string[];
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border">
@@ -916,7 +974,7 @@ function Editor({
   children,
 }: {
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
@@ -968,7 +1026,6 @@ function esc(value: string) {
 
 function networkXml(x: Form) {
   return (
-    '<?xml version="1.0" encoding="UTF-8"?>' +
     '<NetworkInterface version="2.0" xmlns="' +
     XML_NS +
     '">' +
@@ -1000,7 +1057,6 @@ function networkXml(x: Form) {
 
 function timeXml(x: Form) {
   return (
-    '<?xml version="1.0" encoding="UTF-8"?>' +
     '<Time version="2.0" xmlns="' +
     XML_NS +
     '">' +
@@ -1021,7 +1077,6 @@ function timeXml(x: Form) {
 
 function userXml(x: Form) {
   return (
-    '<?xml version="1.0" encoding="UTF-8"?>' +
     '<User version="2.0" xmlns="' +
     XML_NS +
     '">' +
@@ -1035,33 +1090,5 @@ function userXml(x: Form) {
     "<userLevel>" +
     esc(x.userLevel || "Viewer") +
     "</userLevel></User>"
-  );
-}
-
-function cameraXml(x: Form) {
-  return (
-    '<?xml version="1.0" encoding="UTF-8"?>' +
-    '<InputProxyChannel version="2.0" xmlns="' +
-    XML_NS +
-    '">' +
-    "<id>" +
-    esc(x.id || "") +
-    "</id>" +
-    "<name>" +
-    esc(x.name || "") +
-    "</name>" +
-    "<sourceInputPortDescriptor>" +
-    "<addressingFormatType>ipaddress</addressingFormatType>" +
-    "<ipAddress>" +
-    esc(x.ipAddress || "") +
-    "</ipAddress>" +
-    "<managePortNo>" +
-    esc(x.managePortNo || "8000") +
-    "</managePortNo>" +
-    "<userName>" +
-    esc(x.userName || "") +
-    "</userName>" +
-    (x.password ? "<password>" + esc(x.password) + "</password>" : "") +
-    "</sourceInputPortDescriptor></InputProxyChannel>"
   );
 }
