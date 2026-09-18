@@ -46,18 +46,48 @@ function ensureStoreLoaded(): CameraStateStore {
 }
 
 function saveStore(store: CameraStateStore) {
-  try {
-    const directory = path.dirname(STATE_FILE);
+  const directory = path.dirname(STATE_FILE);
+  const tempFile = `${STATE_FILE}.${process.pid}.${Date.now()}.tmp`;
+  const payload = JSON.stringify(store, null, 2);
 
+  try {
     if (!fs.existsSync(directory)) {
       fs.mkdirSync(directory, {
         recursive: true,
       });
     }
 
-    fs.writeFileSync(STATE_FILE, JSON.stringify(store, null, 2), "utf8");
+    // Write to a temporary file first, then replace the state file.
+    // This avoids partial JSON files and is safer when multiple monitor
+    // requests/processes touch the state file on Windows.
+    fs.writeFileSync(tempFile, payload, {
+      encoding: "utf8",
+      flag: "w",
+    });
+
+    fs.renameSync(tempFile, STATE_FILE);
   } catch (error) {
     console.error("[Hikvision Camera State] Failed to save state:", error);
+
+    // Best-effort cleanup of the temporary file.
+    try {
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+    } catch {
+      // Ignore cleanup errors.
+    }
+
+    // If replacing the file failed because Windows temporarily held it,
+    // retry the direct write once rather than losing the in-memory state.
+    try {
+      fs.writeFileSync(STATE_FILE, payload, "utf8");
+    } catch (retryError) {
+      console.error(
+        "[Hikvision Camera State] Retry failed:",
+        retryError,
+      );
+    }
   }
 }
 
