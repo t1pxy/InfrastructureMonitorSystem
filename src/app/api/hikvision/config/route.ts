@@ -7,6 +7,7 @@ import {
   upsertNvrConfig,
 } from "@/lib/hikvision/config";
 import type { NvrConfig } from "@/types/nvr";
+import { hikvisionRequest } from "@/lib/hikvision/client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,6 +54,7 @@ export async function PUT(request: Request) {
         name,
         host,
         port: Number.isFinite(portValue) ? portValue : 80,
+        protocol: body.protocol === "https" ? "https" : "http",
         username,
         password,
         site: site || undefined,
@@ -127,6 +129,45 @@ export async function DELETE(request: Request) {
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Failed to delete configuration." },
       { status: 500 },
+    );
+  }
+}
+
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    if (body.type !== "test") {
+      return NextResponse.json({ success: false, error: "Unsupported test type." }, { status: 400 });
+    }
+
+    const host = String(body.host ?? "").trim();
+    const username = String(body.username ?? "").trim();
+    const password = String(body.password ?? "").trim();
+    const protocol = body.protocol === "https" ? "https" : "http";
+    const port = Number(body.port ?? (protocol === "https" ? 443 : 80));
+
+    if (!host || !username || !password) {
+      return NextResponse.json({ success: false, error: "Host, username and password are required for connection test." }, { status: 400 });
+    }
+
+    const xml = await hikvisionRequest(
+      protocol + "://" + host + ":" + port,
+      username,
+      password,
+      "/ISAPI/System/deviceInfo",
+    );
+
+    const read = (name: string) => xml.match(new RegExp("<" + name + "(?:\\s[^>]*)?>([\\s\\S]*?)</" + name + ">", "i"))?.[1]?.replace(/<!\\[CDATA\\[|\\]\\]>/g, "").trim() || null;
+
+    return NextResponse.json({
+      success: true,
+      data: { model: read("model"), serialNumber: read("serialNumber"), firmware: read("firmwareVersion") || read("firmwareReleasedDate") },
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : "Hikvision connection test failed." },
+      { status: 502 },
     );
   }
 }
