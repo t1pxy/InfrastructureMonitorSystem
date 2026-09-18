@@ -32,17 +32,34 @@ async function run() {
       cache: "no-store",
     });
 
-    const json = await response.json();
+    const contentType = response.headers.get("content-type") || "";
+    const body = await response.text();
+
+    let json;
+    try {
+      json = JSON.parse(body);
+    } catch {
+      const preview = body.replace(/\\s+/g, " ").slice(0, 300);
+      console.error(
+        "[Hikvision Worker] Endpoint did not return JSON:",
+        response.status,
+        contentType,
+        preview,
+      );
+      console.error(
+        "[Hikvision Worker] Check that Next.js is running and the API exists:",
+        `${BASE_URL}/api/monitor/run`,
+      );
+      return;
+    }
 
     if (!response.ok) {
       console.error("[Hikvision Worker] HTTP error:", response.status, json);
-
       return;
     }
 
     if (!json.success) {
       console.error("[Hikvision Worker] Monitor failed:", json.error);
-
       return;
     }
 
