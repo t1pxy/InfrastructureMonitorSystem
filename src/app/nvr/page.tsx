@@ -101,6 +101,7 @@ export default function NvrPage() {
       </tbody></table></div></div>
 
       <div className="flex items-center justify-between rounded-xl border bg-background px-4 py-3 text-sm"><span className="text-muted-foreground">Showing {filtered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1} - {Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button><span>Page {currentPage} / {totalPages}</span><Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button></div></div>
+      <NvrConfigDialog open={configOpen} initial={editing} onClose={() => setConfigOpen(false)} onSaved={() => void load()} onDeleted={() => void load()} />
     </div>
   );
 }
