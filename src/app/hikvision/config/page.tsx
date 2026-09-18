@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, RefreshCw, Save, Server, ShieldAlert, Terminal, Trash2, Wifi } from "lucide-react";
+import { CheckCircle2, Clock, HardDrive, Camera, RefreshCw, Save, Server, Shield, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
