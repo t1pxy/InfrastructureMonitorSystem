@@ -101,35 +101,69 @@ async function getCameras(nvr: NvrConfig): Promise<NvrCamera[]> {
     );
 
     const blocks = allBlocks(xml, "InputProxyChannel");
+    const configured = getHikvisionConfigs().cameras.filter(
+      (camera) => camera.nvrId === nvr.id && camera.enabled !== false,
+    );
 
-    return blocks.map((block, index) => {
+    const discovered = blocks.map((block, index) => {
       const channel = numberValue(tag(block, "id"));
-
+      const override = getCameraConfig(nvr.id, channel);
       return {
         id: `${nvr.id}-${channel ?? index + 1}`,
         channel,
-        name: getCameraConfig(nvr.id, channel)?.name || tag(block, "name") || `Channel ${channel ?? index + 1}`,
-        ipAddress: getCameraConfig(nvr.id, channel)?.ipAddress !== undefined ? getCameraConfig(nvr.id, channel)?.ipAddress ?? null : (tag(block, "ipAddress") ?? null),
-        status: "UNKNOWN",
+        name: override?.name || tag(block, "name") || `Channel ${channel ?? index + 1}`,
+        ipAddress: override?.ipAddress !== undefined ? override.ipAddress ?? null : (tag(block, "ipAddress") ?? null),
+        status: "UNKNOWN" as const,
         lastChecked: null,
         offlineSince: null,
         error: null,
       };
     });
+
+    const discoveredChannels = new Set(
+      discovered.map((camera) => camera.channel).filter((channel): channel is number => channel !== null),
+    );
+
+    const extraConfigured = configured
+      .filter((camera) => !discoveredChannels.has(camera.channel))
+      .map((camera) => ({
+        id: `${nvr.id}-${camera.channel}`,
+        channel: camera.channel,
+        name: camera.name || `Channel ${camera.channel}`,
+        ipAddress: camera.ipAddress ?? null,
+        status: "UNKNOWN" as const,
+        lastChecked: null,
+        offlineSince: null,
+        error: null,
+      }));
+
+    return [...discovered, ...extraConfigured];
   } catch (error) {
-    return [
-      {
-        id: `${nvr.id}-error`,
-        channel: null,
-        name: "Unable to read camera channels",
-        ipAddress: null,
-        status: "UNKNOWN",
+    const configured = getHikvisionConfigs().cameras.filter(
+      (camera) => camera.nvrId === nvr.id && camera.enabled !== false,
+    );
+    if (configured.length > 0) {
+      return configured.map((camera) => ({
+        id: `${nvr.id}-${camera.channel}`,
+        channel: camera.channel,
+        name: camera.name || `Channel ${camera.channel}`,
+        ipAddress: camera.ipAddress ?? null,
+        status: "UNKNOWN" as const,
         lastChecked: new Date().toISOString(),
         offlineSince: null,
-        error:
-          error instanceof Error ? error.message : "Unknown Hikvision error",
-      },
-    ];
+        error: error instanceof Error ? error.message : "Unable to read camera channels",
+      }));
+    }
+    return [{
+      id: `${nvr.id}-error`,
+      channel: null,
+      name: "Unable to read camera channels",
+      ipAddress: null,
+      status: "UNKNOWN",
+      lastChecked: new Date().toISOString(),
+      offlineSince: null,
+      error: error instanceof Error ? error.message : "Unknown Hikvision error",
+    }];
   }
 }
 
