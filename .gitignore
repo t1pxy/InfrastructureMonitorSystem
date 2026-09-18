@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Hikvision runtime configuration and state
+/data/hikvision-config.json
+/data/hikvision-camera-state.json
+/data/hikvision-monitor-state.json
+/data/*.tmp
