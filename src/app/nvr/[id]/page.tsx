@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 import type { Nvr, NvrCamera, NvrDetailResponse } from "@/types/nvr";
+import { CameraConfigDialog } from "@/components/hikvision/CameraConfigDialog";
 
 function formatThai(value: string | null | undefined) {
   if (!value) {
@@ -109,6 +110,7 @@ export default function NvrDetailPage({
   const [nvrId, setNvrId] = useState<string | null>(null);
 
   const [now, setNow] = useState(() => Date.now());
+  const [editingCamera, setEditingCamera] = useState<NvrCamera | null>(null);
 
   /*
    * Realtime clock for Offline Duration.
@@ -362,7 +364,7 @@ export default function NvrDetailPage({
 
                     <th className="px-5 py-3">Duration</th>
 
-                    <th className="px-5 py-3">Last Check</th>
+                    <th className="px-5 py-3">Last Check</th>\n                    <th className="px-5 py-3 text-right">Action</th>
                   </tr>
                 </thead>
 
@@ -370,7 +372,7 @@ export default function NvrDetailPage({
                   {realCameras.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="px-5 py-12 text-center text-muted-foreground"
                       >
                         No CCTV channel data returned by this NVR.
