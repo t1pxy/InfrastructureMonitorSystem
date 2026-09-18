@@ -108,11 +108,22 @@ export async function writeMonitorState(state: MonitorState) {
   const content = JSON.stringify(state, null, 2);
 
   writeQueue = writeQueue.then(async () => {
-    const tempFile = `${STATE_FILE}.tmp`;
+    let lastError: unknown = null;
 
-    await fs.writeFile(tempFile, content, "utf8");
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await fs.writeFile(STATE_FILE, content, "utf8");
+        return;
+      } catch (error) {
+        lastError = error;
 
-    await fs.rename(tempFile, STATE_FILE);
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+        }
+      }
+    }
+
+    throw lastError;
   });
 
   await writeQueue;
