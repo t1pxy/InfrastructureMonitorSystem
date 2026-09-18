@@ -10,11 +10,13 @@ export function NvrConfigDialog({
   initial,
   onClose,
   onSaved,
+  onDeleted,
 }: {
   open: boolean;
   initial?: NvrConfig | null;
   onClose: () => void;
   onSaved: () => void;
+  onDeleted?: () => void;
 }) {
   const [form, setForm] = useState({
     id: "",
@@ -43,6 +45,17 @@ export function NvrConfigDialog({
   }, [open, initial]);
 
   if (!open) return null;
+
+  async function remove() {
+    if (!initial?.id) return;
+    if (!window.confirm("ต้องการลบ NVR " + initial.id + " ใช่หรือไม่?")) return;
+    try {
+      const response = await fetch("/api/hikvision/config", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "nvr", id: initial.id }) });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error ?? "Delete failed");
+      onDeleted?.(); onClose();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Delete failed"); }
+  }
 
   async function save() {
     setSaving(true);
@@ -87,9 +100,12 @@ export function NvrConfigDialog({
 
         {error ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
 
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="mt-6 flex justify-between gap-2">
+          <div>{initial && onDeleted ? <Button variant="destructive" onClick={() => void remove()} disabled={saving}>Delete</Button> : null}</div>
+          <div className="flex gap-2">
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button onClick={() => void save()} disabled={saving}>{saving ? "Saving..." : "Save Configuration"}</Button>
+          </div>
         </div>
       </div>
     </div>
