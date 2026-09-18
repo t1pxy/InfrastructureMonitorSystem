@@ -10,6 +10,13 @@ interface CameraState {
 
 type CameraStateStore = Record<string, CameraState>;
 
+export interface CameraStateUpdate {
+  nvrId: string;
+  channel: number | null;
+  status: CameraStatus;
+  now: string;
+}
+
 const STATE_FILE = path.join(
   process.cwd(),
   "data",
@@ -19,9 +26,7 @@ const STATE_FILE = path.join(
 let memoryStore: CameraStateStore | null = null;
 
 function ensureStoreLoaded(): CameraStateStore {
-  if (memoryStore) {
-    return memoryStore;
-  }
+  if (memoryStore) return memoryStore;
 
   try {
     if (!fs.existsSync(STATE_FILE)) {
@@ -32,11 +37,10 @@ function ensureStoreLoaded(): CameraStateStore {
     const raw = fs.readFileSync(STATE_FILE, "utf8");
     const parsed = JSON.parse(raw) as unknown;
 
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      memoryStore = parsed as CameraStateStore;
-    } else {
-      memoryStore = {};
-    }
+    memoryStore =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as CameraStateStore)
+        : {};
   } catch (error) {
     console.error("[Hikvision Camera State] Failed to load state:", error);
     memoryStore = {};
@@ -51,14 +55,9 @@ function saveStore(store: CameraStateStore) {
 
   try {
     if (!fs.existsSync(directory)) {
-      fs.mkdirSync(directory, {
-        recursive: true,
-      });
+      fs.mkdirSync(directory, { recursive: true });
     }
 
-    // Windows can keep the existing JSON file open (for example by the
-    // Next.js watcher/AV scanner), which makes rename-over-existing fail
-    // with EPERM. Write directly with a short retry instead.
     let lastError: unknown = null;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -67,7 +66,6 @@ function saveStore(store: CameraStateStore) {
           encoding: "utf8",
           flag: "w",
         });
-
         return;
       } catch (error) {
         lastError = error;
@@ -77,7 +75,7 @@ function saveStore(store: CameraStateStore) {
           const end = Date.now() + delayMs;
 
           while (Date.now() < end) {
-            // Small synchronous backoff for transient Windows file locks.
+            // Short synchronous backoff for transient Windows file locks.
           }
         }
       }
@@ -93,40 +91,64 @@ export function getCameraStateKey(nvrId: string, channel: number | null) {
   return `${nvrId}::${channel ?? "unknown"}`;
 }
 
+function buildNextState(
+  store: CameraStateStore,
+  update: CameraStateUpdate,
+): CameraState {
+  const key = getCameraStateKey(update.nvrId, update.channel);
+  const previous = store[key];
+
+  let offlineSince: string | null = null;
+
+  if (update.status === "OFFLINE") {
+    offlineSince =
+      previous?.status === "OFFLINE" && previous.offlineSince
+        ? previous.offlineSince
+        : update.now;
+  } else if (update.status === "UNKNOWN") {
+    offlineSince = previous?.offlineSince ?? null;
+  }
+
+  return {
+    status: update.status,
+    offlineSince,
+    lastChecked: update.now,
+  };
+}
+
+/**
+ * Updates all supplied camera states and writes the JSON file once.
+ */
+export function updateCameraStates(updates: CameraStateUpdate[]) {
+  const store = ensureStoreLoaded();
+  const states: CameraState[] = [];
+
+  for (const update of updates) {
+    const key = getCameraStateKey(update.nvrId, update.channel);
+    const next = buildNextState(store, update);
+
+    store[key] = next;
+    states.push(next);
+  }
+
+  if (updates.length > 0) {
+    saveStore(store);
+  }
+
+  return states;
+}
+
+/**
+ * Backward-compatible single-camera helper.
+ * Prefer updateCameraStates() for monitor batches.
+ */
 export function updateCameraState(
   nvrId: string,
   channel: number | null,
   status: CameraStatus,
   now: string,
 ) {
-  const store = ensureStoreLoaded();
-  const key = getCameraStateKey(nvrId, channel);
-  const previous = store[key];
-
-  let offlineSince: string | null = null;
-
-  if (status === "OFFLINE") {
-    if (previous?.status === "OFFLINE" && previous.offlineSince) {
-      offlineSince = previous.offlineSince;
-    } else {
-      offlineSince = now;
-    }
-  } else if (status === "UNKNOWN") {
-    // Do not destroy an existing offline timestamp when
-    // Hikvision temporarily fails to return a status.
-    offlineSince = previous?.offlineSince ?? null;
-  }
-
-  const next: CameraState = {
-    status,
-    offlineSince,
-    lastChecked: now,
-  };
-
-  store[key] = next;
-  saveStore(store);
-
-  return next;
+  return updateCameraStates([{ nvrId, channel, status, now }])[0];
 }
 
 export function getCameraState(nvrId: string, channel: number | null) {
