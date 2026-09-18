@@ -113,3 +113,11 @@ export function upsertCameraConfig(config: CameraConfig) {
   save(store);
   return getCameraConfig(config.nvrId, config.channel);
 }
+
+export function deleteCameraConfig(nvrId: string, channel: number) {
+  const store = load();
+  store.cameras = store.cameras.filter(
+    (camera) => !(camera.nvrId === nvrId && camera.channel === channel),
+  );
+  save(store);
+}
