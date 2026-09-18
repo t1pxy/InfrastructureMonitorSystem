@@ -361,6 +361,12 @@ export default function CctvPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/cctv/history"
+            className="inline-flex h-9 items-center justify-center rounded-lg border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"
+          >
+            History
+          </Link>
           <Button onClick={() => { setEditingCamera(null); setCameraDialogOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />Add CCTV
           </Button>
